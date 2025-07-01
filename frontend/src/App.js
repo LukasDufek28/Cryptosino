@@ -1,22 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import DiceGame from './DiceGame';
 import CrashGame from './CrashGame';
 import BlackjackGame from './BlackjackGame';
 
 function MainPage({ balance }) {
-  const [message, setMessage] = useState('');
-
-  useEffect(() => {
-    fetch('https://cryptosino-0noq.onrender.com')
-      .then(res => res.text())
-      .then(data => setMessage(data));
-  }, []);
 
   return (
     <div>
       <h1>Main Page</h1>
-      <p>{message}</p>
       <p>Balance: <b>${balance.toFixed(2)}</b></p>
       <Link to="/dice">Go to Dice Game</Link>
       <br />

@@ -1,5 +1,7 @@
 import React, { useState, useRef } from 'react';
 
+const API_URL = process.env.REACT_APP_API_URL;
+
 function CrashGame({ balance, setBalance }) {
   const [bet, setBet] = useState(10);
   const [gameState, setGameState] = useState('waiting'); // waiting, running, crashed, cashed
@@ -23,7 +25,7 @@ function CrashGame({ balance, setBalance }) {
     const seed = clientSeed || Math.random().toString(36).substring(2);
 
     // Fetch crash multiplier from backend
-    const response = await fetch('https://cryptosino-0noq.onrender.com/api/crash', {
+    const response = await fetch(`${API_URL}/api/crash`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ clientSeed: seed, nonce: newNonce })

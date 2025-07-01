@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 
+const API_URL = process.env.REACT_APP_API_URL;
+
 function DiceGame({ balance, setBalance }) {
   const [winChance, setWinChance] = useState(50);
   const [clientSeed, setClientSeed] = useState('');
@@ -17,7 +19,7 @@ function DiceGame({ balance, setBalance }) {
     }
     const seed = clientSeed || Math.random().toString(36).substring(2);
     const nonce = Math.floor(Math.random() * 1e9);
-    const response = await fetch('https://cryptosino-0noq.onrender.com/api/roll', {
+    const response = await fetch(`${API_URL}/api/roll`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ clientSeed: seed, winChance: Number(winChance), nonce })

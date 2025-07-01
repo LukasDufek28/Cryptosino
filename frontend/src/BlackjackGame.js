@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import './BlackjackGame.css';
 
+const API_URL = process.env.REACT_APP_API_URL;
+
 function handValue(hand) {
   let value = 0, aces = 0;
   for (let card of hand) {
@@ -25,7 +27,7 @@ function BlackjackGame({ balance, setBalance }) {
       setMessage('Invalid bet amount!');
       return;
     }
-    const res = await fetch('https://cryptosino-0noq.onrender.com/api/blackjack/deal', {
+    const res = await fetch(`${API_URL}/api/blackjack/deal`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ bet })
@@ -45,7 +47,7 @@ function BlackjackGame({ balance, setBalance }) {
   };
 
   const hit = async () => {
-    const res = await fetch('https://cryptosino-0noq.onrender.com/api/blackjack/hit', {
+    const res = await fetch(`${API_URL}/api/blackjack/hit`, {
       method: 'POST'
     });
     const data = await res.json();
@@ -61,7 +63,7 @@ function BlackjackGame({ balance, setBalance }) {
   };
 
   const stand = async () => {
-    const res = await fetch('https://cryptosino-0noq.onrender.com/api/blackjack/stand', {
+    const res = await fetch(`${API_URL}/api/blackjack/stand`, {
       method: 'POST'
     });
     const data = await res.json();
