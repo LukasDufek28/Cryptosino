@@ -13,6 +13,10 @@ app.get('/', (req, res) => {
   res.send('Hello from the backend!');
 });
 
+app.get('/api/ping', (req, res) => {
+  res.json({ "message": "Yes Sir" });
+});
+
 // Provably fair dice roll endpoint
 app.post('/api/roll', (req, res) => {
   const { clientSeed, winChance, nonce } = req.body;

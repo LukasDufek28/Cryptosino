@@ -1,0 +1,105 @@
+.crash-container {
+  background: #181a20;
+  color: #fff;
+  border-radius: 24px;
+  padding: 48px 40px;
+  max-width: 700px;
+  min-width: 400px;
+  margin: 60px auto;
+  box-shadow: 0 8px 48px #000a;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  font-size: 1.25em;
+}
+
+.crash-balance {
+  font-size: 1.2em;
+  margin-bottom: 24px;
+}
+
+.crash-inputs label {
+  display: block;
+  margin: 18px 0 8px 0;
+  font-size: 1.1em;
+}
+
+.crash-inputs input[type="number"],
+.crash-inputs input[type="text"] {
+  background: #23262f;
+  color: #fff;
+  border: 1px solid #23262f;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 1.1em;
+  margin-top: 6px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.crash-btn {
+  background: linear-gradient(90deg, #00e1ff 0%, #0077ff 100%);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 18px 0;
+  font-size: 1.25em;
+  font-weight: bold;
+  width: 100%;
+  margin: 28px 0 0 0;
+  cursor: pointer;
+  transition: background 0.2s;
+  box-shadow: 0 4px 16px #00e1ff33;
+}
+
+.crash-btn:disabled {
+  background: #23262f;
+  color: #888;
+  cursor: not-allowed;
+}
+
+.crash-btn.red {
+  background: #ff006a !important;
+  color: #fff !important;
+}
+
+.crash-btn.blue {
+  background: #00bfff !important;
+  color: #fff !important;
+}
+
+.crash-multiplier {
+  font-size: 4em;
+  font-weight: bold;
+  margin: 40px 0 18px 0;
+  text-shadow: 0 0 24px #00e1ff, 0 0 8px #fff;
+  letter-spacing: 3px;
+  transition: color 0.2s;
+}
+
+.crash-multiplier.green {
+  color: #00e1ff;
+}
+
+.crash-multiplier.red {
+  color: #ff006a;
+  text-shadow: 0 0 24px #ff006a, 0 0 8px #fff;
+}
+
+.crash-multiplier.blue {
+  color: #00ffb0;
+  text-shadow: 0 0 24px #00ffb0, 0 0 8px #fff;
+}
+
+.crash-message {
+  margin: 18px 0 0 0;
+  font-size: 1.2em;
+  min-height: 28px;
+}
+
+.crash-details {
+  margin-top: 28px;
+  font-size: 1.1em;
+  color: #aaa;
+  background: #23262f;
+  border-radius: 12px;
+  padding: 16px 20px;
+}
