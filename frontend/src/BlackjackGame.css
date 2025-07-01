@@ -1,0 +1,10 @@
+.card-fade {
+  opacity: 0;
+  animation: fadeInCard 0.2s forwards;
+}
+
+@keyframes fadeInCard {
+  to {
+    opacity: 1;
+  }
+}
