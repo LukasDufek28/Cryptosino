@@ -1,0 +1,102 @@
+.dice-container {
+  background: #181a20;
+  color: #fff;
+  border-radius: 20px;
+  padding: 40px 32px;
+  max-width: 420px;
+  margin: 40px auto;
+  box-shadow: 0 4px 32px #000a;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  font-size: 1.1em;
+}
+
+.dice-balance {
+  font-size: 1.1em;
+  margin-bottom: 18px;
+}
+
+.dice-inputs label {
+  display: block;
+  margin: 14px 0 8px 0;
+  font-size: 1em;
+}
+
+.dice-inputs input[type="number"],
+.dice-inputs input[type="text"] {
+  background: #23262f;
+  color: #fff;
+  border: 1px solid #23262f;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 1em;
+  margin-top: 4px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.dice-slider {
+  width: 100%;
+  margin: 8px 0 0 0;
+}
+
+.dice-btn {
+  background: linear-gradient(90deg, #00e1ff 0%, #0077ff 100%);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 12px 0;
+  font-size: 1.1em;
+  font-weight: bold;
+  width: 100%;
+  margin: 18px 0 0 0;
+  cursor: pointer;
+  transition: background 0.2s;
+  box-shadow: 0 2px 8px #00e1ff33;
+}
+
+.dice-btn:disabled {
+  background: #23262f;
+  color: #888;
+  cursor: not-allowed;
+}
+
+.dice-result {
+  margin-top: 22px;
+  background: #23262f;
+  border-radius: 10px;
+  padding: 16px 18px;
+  font-size: 1.1em;
+  color: #fff;
+  box-shadow: 0 2px 8px #00e1ff22;
+}
+
+.dice-result b {
+  color: #00e1ff;
+}
+
+.dice-result .lose {
+  color: #ff006a;
+}
+
+.dice-result .win {
+  color: #00ffb0;
+}
+
+.dice-auto-btn {
+  background: linear-gradient(90deg, #00ff7f 0%, #00c853 100%);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 18px;
+  font-size: 1em;
+  font-weight: bold;
+  margin-left: 14px;
+  cursor: pointer;
+  transition: background 0.2s;
+  box-shadow: 0 2px 8px #00ff7f33;
+}
+
+.dice-auto-btn.active {
+  background: linear-gradient(90deg, #009944 0%, #007733 100%);
+  color: #fff;
+}
