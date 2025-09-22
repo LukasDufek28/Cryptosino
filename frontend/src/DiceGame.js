@@ -7,16 +7,18 @@ function DiceGame({ balance, setBalance, token }) {
   const [winChance, setWinChance] = useState(50);
   const [clientSeed, setClientSeed] = useState('');
   const [result, setResult] = useState(null);
-  const [bet, setBet] = useState(10);
+  const [bet, setBet] = useState('10');
   const [autoRolling, setAutoRolling] = useState(false);
   const autoRollRef = useRef(null);
 
   // Calculate potential payout based on bet and winChance
+  const numericBet = Number(bet) || 0;
   const payoutMultiplier = (99 / winChance) * 0.99;
-  const potentialPayout = (bet * payoutMultiplier).toFixed(2);
+  const potentialPayout = (numericBet > 0 ? (numericBet * payoutMultiplier).toFixed(2) : '0.00');
 
   const handlePlay = useCallback(async () => {
-    if (bet > balance || bet <= 0) {
+    const wager = Number(bet);
+    if (!wager || wager <= 0 || wager > balance) {
       alert('Invalid bet amount!');
       setAutoRolling(false); // Stop auto roll if invalid
       return;
@@ -29,7 +31,7 @@ function DiceGame({ balance, setBalance, token }) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ bet, winChance: Number(winChance), clientSeed })
+        body: JSON.stringify({ bet: wager, winChance: Number(winChance), clientSeed })
       });
       const data = await response.json();
       if (!response.ok) {
@@ -50,10 +52,10 @@ function DiceGame({ balance, setBalance, token }) {
         body: JSON.stringify({ clientSeed: seed, winChance: Number(winChance), nonce })
       });
       const data = await response.json();
-      let newBalance = balance - bet;
-      if (data.win) newBalance += bet * payoutMultiplier;
+  let newBalance = balance - wager;
+  if (data.win) newBalance += wager * payoutMultiplier;
       setBalance(Number(newBalance.toFixed(2)));
-      setResult({ ...data, payout: data.win ? (bet * payoutMultiplier).toFixed(2) : 0 });
+  setResult({ ...data, payout: data.win ? (wager * payoutMultiplier).toFixed(2) : 0 });
       setClientSeed(seed);
     }
   }, [API_URL, balance, bet, clientSeed, payoutMultiplier, setBalance, token, winChance]);
@@ -92,10 +94,19 @@ function DiceGame({ balance, setBalance, token }) {
         <label>
           Bet Amount:
           <input
-            type="number"
-            min="1"
+            type="text"
+            inputMode="decimal"
             value={bet}
-            onChange={e => setBet(Number(e.target.value))}
+            onChange={e => {
+              const v = e.target.value;
+              if (v === '') { setBet(''); return; }
+              if (/^\d*(?:\.\d{0,2})?$/.test(v)) { setBet(v); }
+            }}
+            onBlur={() => {
+              if (bet === '' || Number(bet) <= 0) setBet('10');
+              else setBet(String(Number(bet))); // normalize remove leading zeros
+            }}
+            placeholder="Bet"
           />
         </label>
         <label>
@@ -113,7 +124,7 @@ function DiceGame({ balance, setBalance, token }) {
           Potential Payout: <b>${potentialPayout}</b>
         </div>
       </div>
-      <button className="dice-btn" onClick={handlePlay} disabled={bet > balance || bet <= 0 || autoRolling}>Play</button>
+  <button className="dice-btn" onClick={handlePlay} disabled={numericBet > balance || numericBet <= 0 || autoRolling}>Play</button>
       {result && (
         <div className="dice-result">
           <p>

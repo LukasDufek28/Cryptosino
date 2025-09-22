@@ -4,7 +4,7 @@ import './CrashGame.css';
 const API_URL = process.env.REACT_APP_API_URL;
 
 function CrashGame({ balance, setBalance, token }) {
-  const [bet, setBet] = useState(10);
+  const [bet, setBet] = useState('10');
   const [gameState, setGameState] = useState('waiting'); // waiting, running, crashed, cashed
   const [multiplier, setMultiplier] = useState(1.00);
   const [crashAt, setCrashAt] = useState(null);
@@ -14,11 +14,13 @@ function CrashGame({ balance, setBalance, token }) {
   const [clientSeed] = useState('');
   const [nonce, setNonce] = useState(0);
   const [multiplierHistory, setMultiplierHistory] = useState([]);
+  const [betId, setBetId] = useState(null);
   const intervalRef = useRef(null);
   const startTimeRef = useRef(null);
 
   const handleStart = async () => {
-    if (bet > balance || bet <= 0) {
+    const wager = Number(bet);
+    if (!wager || wager <= 0 || wager > balance) {
       setMessage('Invalid bet amount!');
       return;
     }
@@ -31,13 +33,14 @@ function CrashGame({ balance, setBalance, token }) {
         const res = await fetch(`${API_URL}/api/crash/start`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ bet, clientSeed: seed })
+          body: JSON.stringify({ bet: wager, clientSeed: seed })
         });
         const data = await res.json();
         if (!res.ok) { setMessage(data.error || 'Crash start failed'); return; }
-        crashPoint = data.crashMultiplier;
+  crashPoint = data.crashMultiplier;
         newNonce = data.nonce;
         setBalance(Number(data.newBalance));
+  setBetId(data.betId);
       } catch (e) { setMessage('Network error'); return; }
     } else {
       // Stateless preview path
@@ -52,7 +55,7 @@ function CrashGame({ balance, setBalance, token }) {
         });
         const data = await res.json();
         crashPoint = data.crashMultiplier;
-        setBalance(prev => Number((prev - bet).toFixed(2))); // local debit only
+        setBalance(prev => Number((prev - wager).toFixed(2))); // local debit only
       } catch (e) { setMessage('Network error'); return; }
     }
 
@@ -91,11 +94,19 @@ function CrashGame({ balance, setBalance, token }) {
         const res = await fetch(`${API_URL}/api/crash/cashout`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-          body: JSON.stringify({ betId: null, atMultiplier: multiplier }) // TODO: track betId if needed in UI state
+          body: JSON.stringify({ betId, atMultiplier: multiplier })
         });
         const data = await res.json();
-        // For now ignore server validation since we didn't store betId on start; improvement: store betId from /start
-        if (data.newBalance) setBalance(Number(data.newBalance));
+        if (res.ok) {
+          if (data.newBalance) setBalance(Number(data.newBalance));
+          // Use authoritative crash multiplier & payout
+          if (data.crashMultiplier) setCrashAt(data.crashMultiplier);
+          if (data.payout) {
+            setMessage(`You cashed at ${multiplier.toFixed(2)}x. Payout: $${Number(data.payout).toFixed(2)} | Crash: ${Number(data.crashMultiplier).toFixed(2)}x`);
+          }
+        } else {
+          setMessage(data.error || 'Cashout failed');
+        }
       } catch {}
     } else {
       const payout = (bet * multiplier).toFixed(2);
@@ -126,6 +137,7 @@ function CrashGame({ balance, setBalance, token }) {
         setMessage('');
         setMultiplierHistory([1.00]);
         setFinalRevealed(false);
+        setBetId(null);
       }, delay);
       return () => clearTimeout(timer);
     }
@@ -144,11 +156,19 @@ function CrashGame({ balance, setBalance, token }) {
         <label>
           Bet Amount:
           <input
-            type="number"
-            min="1"
+            type="text"
+            inputMode="decimal"
             value={bet}
             disabled={gameState !== 'waiting'}
-            onChange={e => setBet(Number(e.target.value))}
+            onChange={e => {
+              const v = e.target.value;
+              if (v === '') { setBet(''); return; }
+              if (/^\d*(?:\.\d{0,2})?$/.test(v)) setBet(v);
+            }}
+            onBlur={() => {
+              if (bet === '' || Number(bet) <= 0) setBet('10');
+              else setBet(String(Number(bet)));
+            }}
           />
         </label>
       </div>

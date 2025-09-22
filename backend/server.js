@@ -16,7 +16,12 @@ app.use(express.json());
 
 // Auth helpers
 function signToken(user) {
-  return jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
+  return jwt.sign({ id: user.id, username: user.username, is_admin: !!user.is_admin }, JWT_SECRET, { expiresIn: '7d' });
+}
+
+function adminOnly(req, res, next) {
+  if (!req.user || !req.user.is_admin) return res.status(403).json({ error: 'Admin only' });
+  next();
 }
 
 async function authMiddleware(req, res, next) {
@@ -63,7 +68,7 @@ app.post('/api/register', async (req, res) => {
     const { rows } = await query(
       `INSERT INTO users (username, password_hash) VALUES ($1,$2)
        ON CONFLICT (username) DO NOTHING
-       RETURNING id, username, balance, created_at`,
+       RETURNING id, username, balance, peak_balance, is_admin, created_at`,
       [username, hash]
     );
     if (!rows.length) return res.status(409).json({ error: 'Username already exists' });
@@ -80,7 +85,7 @@ app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Username & password required' });
   try {
-    const { rows } = await query('SELECT id, username, password_hash, balance, created_at FROM users WHERE username=$1', [username]);
+  const { rows } = await query('SELECT id, username, password_hash, balance, peak_balance, is_admin, created_at FROM users WHERE username=$1', [username]);
     if (!rows.length) return res.status(401).json({ error: 'Invalid credentials' });
     const user = rows[0];
     const ok = await bcrypt.compare(password, user.password_hash);
@@ -96,12 +101,166 @@ app.post('/api/login', async (req, res) => {
 // Current user
 app.get('/api/me', authMiddleware, async (req, res) => {
   try {
-    const { rows } = await query('SELECT id, username, balance, created_at FROM users WHERE id=$1', [req.user.id]);
+    const { rows } = await query('SELECT id, username, balance, peak_balance, is_admin, created_at FROM users WHERE id=$1', [req.user.id]);
     if (!rows.length) return res.status(404).json({ error: 'User not found' });
     res.json({ user: rows[0] });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// Peak balance leaderboard (top 10)
+app.get('/api/leaderboard/peak', async (req, res) => {
+  try {
+    const { rows } = await query('SELECT username, peak_balance FROM users ORDER BY peak_balance DESC, id ASC LIMIT 10');
+    res.json({ leaders: rows });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ===================== Admin Endpoints =====================
+// Stats: overall and by game
+app.get('/api/admin/stats', authMiddleware, adminOnly, async (req, res) => {
+  try {
+    const overallSql = `SELECT
+      (SELECT COUNT(*) FROM users) AS total_users,
+      (SELECT COALESCE(SUM(balance),0) FROM users) AS total_balance,
+      (SELECT COALESCE(SUM(peak_balance),0) FROM users) AS total_peak_balance,
+      (SELECT COUNT(*) FROM bets) AS total_bets,
+      (SELECT COALESCE(SUM(wager),0) FROM bets) AS total_wagered,
+      (SELECT COALESCE(SUM(payout),0) FROM bets) AS total_payout`;
+    const overall = await query(overallSql);
+    const byGame = await query(`SELECT game, COUNT(*) AS bets, COALESCE(SUM(wager),0) AS total_wagered, COALESCE(SUM(payout),0) AS total_payout,
+        COALESCE(SUM(wager),0) - COALESCE(SUM(payout),0) AS house_profit
+      FROM bets GROUP BY game ORDER BY game`);
+    const row = overall.rows[0];
+    const house_profit = Number(row.total_wagered) - Number(row.total_payout);
+    res.json({
+      overall: { ...row, house_profit },
+      byGame: byGame.rows
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Users list with aggregates
+app.get('/api/admin/users', authMiddleware, adminOnly, async (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 200, 500);
+  try {
+    const { rows } = await query(`SELECT u.id, u.username, u.balance, u.peak_balance, u.is_admin, u.created_at,
+        COALESCE(SUM(b.wager),0) AS total_wagered,
+        COALESCE(SUM(b.payout),0) AS total_payout,
+        COALESCE(SUM(b.payout),0) - COALESCE(SUM(b.wager),0) AS net_profit
+      FROM users u
+      LEFT JOIN bets b ON b.user_id = u.id
+      GROUP BY u.id
+      ORDER BY u.balance DESC
+      LIMIT $1`, [limit]);
+    res.json({ users: rows });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Promote user to admin
+app.post('/api/admin/users/:id/promote', authMiddleware, adminOnly, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+  try {
+    const { rows } = await query('UPDATE users SET is_admin=TRUE WHERE id=$1 RETURNING id, username, is_admin', [id]);
+    if (!rows.length) return res.status(404).json({ error: 'User not found' });
+    res.json({ ok: true, user: rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Demote user from admin (cannot demote last remaining admin)
+app.post('/api/admin/users/:id/unpromote', authMiddleware, adminOnly, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+  if (id === req.user.id) return res.status(400).json({ error: 'You cannot unpromote yourself' });
+  try {
+    // Check if target exists and is currently admin
+    const target = await query('SELECT id, username, is_admin FROM users WHERE id=$1', [id]);
+    if (!target.rows.length) return res.status(404).json({ error: 'User not found' });
+    if (!target.rows[0].is_admin) return res.status(400).json({ error: 'User is not an admin' });
+    // Count current admins
+    const adminCount = await query('SELECT COUNT(*)::int AS c FROM users WHERE is_admin=TRUE');
+    if (adminCount.rows[0].c <= 1) {
+      return res.status(400).json({ error: 'Cannot demote the last remaining admin' });
+    }
+    const demoted = await query('UPDATE users SET is_admin=FALSE WHERE id=$1 RETURNING id, username, is_admin', [id]);
+    res.json({ ok: true, user: demoted.rows[0] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Delete user (cannot delete last remaining admin, and optionally could block self-delete)
+app.delete('/api/admin/users/:id', authMiddleware, adminOnly, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+  if (id === req.user.id) return res.status(400).json({ error: 'You cannot delete your own account' });
+  try {
+    const target = await query('SELECT id, username, is_admin FROM users WHERE id=$1', [id]);
+    if (!target.rows.length) return res.status(404).json({ error: 'User not found' });
+    if (target.rows[0].is_admin) {
+      const adminCount = await query('SELECT COUNT(*)::int AS c FROM users WHERE is_admin=TRUE');
+      if (adminCount.rows[0].c <= 1) {
+        return res.status(400).json({ error: 'Cannot delete the last remaining admin' });
+      }
+    }
+    await query('DELETE FROM users WHERE id=$1', [id]);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Reset a user's peak balance back to 1000.00 (does not alter current balance)
+app.post('/api/admin/users/:id/reset-peak', authMiddleware, adminOnly, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+  try {
+    const { rows } = await query('UPDATE users SET peak_balance=1000.00 WHERE id=$1 RETURNING id, username, balance, peak_balance, is_admin', [id]);
+    if (!rows.length) return res.status(404).json({ error: 'User not found' });
+    res.json({ ok: true, user: rows[0] });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Wipe all bets (irreversible). Body must include { confirm: 'WIPE' }
+app.post('/api/admin/bets/wipe', authMiddleware, adminOnly, async (req, res) => {
+  const { confirm } = req.body || {};
+  if (confirm !== 'WIPE') return res.status(400).json({ error: 'Confirmation phrase mismatch' });
+  try {
+    await query('DELETE FROM bets');
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Adjust user balance: { amount, mode } mode: set|delta
+app.post('/api/admin/users/:id/balance', authMiddleware, adminOnly, async (req, res) => {
+  const id = Number(req.params.id);
+  let { amount, mode } = req.body;
+  amount = Number(amount);
+  if (!id || isNaN(amount)) return res.status(400).json({ error: 'Invalid id or amount' });
+  mode = mode === 'set' ? 'set' : 'delta';
+  try {
+    let row;
+    if (mode === 'set') {
+      const { rows } = await query('UPDATE users SET balance=$2, peak_balance=GREATEST(peak_balance,$2) WHERE id=$1 RETURNING id, username, balance, peak_balance', [id, amount]);
+      if (!rows.length) return res.status(404).json({ error: 'User not found' });
+      row = rows[0];
+    } else {
+      const { rows } = await query('UPDATE users SET balance=balance + $2, peak_balance=GREATEST(peak_balance, balance + $2) WHERE id=$1 RETURNING id, username, balance, peak_balance', [id, amount]);
+      if (!rows.length) return res.status(404).json({ error: 'User not found' });
+      row = rows[0];
+    }
+    res.json({ ok: true, user: row });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Reset balance to 1000 if current balance < 1000
@@ -113,7 +272,7 @@ app.post('/api/reset-balance', authMiddleware, async (req, res) => {
     if (current >= 1000) {
       return res.status(400).json({ error: 'Balance is already 1000 or higher' });
     }
-    await query('UPDATE users SET balance=1000.00 WHERE id=$1', [req.user.id]);
+  await query('UPDATE users SET balance=1000.00, peak_balance=GREATEST(peak_balance, 1000.00) WHERE id=$1', [req.user.id]);
     res.json({ ok: true, balance: 1000.00 });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -172,7 +331,7 @@ app.post('/api/dice/roll', authMiddleware, async (req, res) => {
         payout = Number((wager * payoutMultiplier).toFixed(2));
         newBalance += payout;
       }
-      await client.query('UPDATE users SET balance=$2 WHERE id=$1', [user.id, newBalance]);
+  await client.query('UPDATE users SET balance=$2, peak_balance=GREATEST(peak_balance,$2) WHERE id=$1', [user.id, newBalance]);
       await client.query(
         'INSERT INTO bets (user_id, game, wager, payout, result) VALUES ($1,$2,$3,$4,$5)',
         [user.id, 'dice', wager, payout, JSON.stringify({ roll: rollVal.toFixed(2), win, winChance: chance })]
@@ -245,7 +404,7 @@ app.post('/api/crash/start', authMiddleware, async (req, res) => {
       const user = rows[0];
       if (Number(user.balance) < wager) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Insufficient balance' }); }
       const newBalance = Number(user.balance) - wager;
-      await client.query('UPDATE users SET balance=$2 WHERE id=$1', [user.id, newBalance]);
+  await client.query('UPDATE users SET balance=$2, peak_balance=GREATEST(peak_balance,$2) WHERE id=$1', [user.id, newBalance]);
       // Record bet with temporary result (cashout handled later)
       const result = { phase: 'started', crashMultiplier, clientSeed: seed, nonce };
       const betInsert = await client.query('INSERT INTO bets (user_id, game, wager, payout, result) VALUES ($1,$2,$3,$4,$5) RETURNING id', [user.id, 'crash', wager, 0, JSON.stringify(result)]);
@@ -285,7 +444,7 @@ app.post('/api/crash/cashout', authMiddleware, async (req, res) => {
         payout = 0;
       }
       if (payout > 0) {
-        await client.query('UPDATE users SET balance = balance + $2 WHERE id=$1', [req.user.id, payout]);
+  await client.query('UPDATE users SET balance = balance + $2, peak_balance=GREATEST(peak_balance, balance + $2) WHERE id=$1', [req.user.id, payout]);
       }
       const newResult = { phase: 'finished', crashMultiplier, cashedAt: outcome === 'cashed' ? m : null, outcome };
       await client.query('UPDATE bets SET payout=$2, result=$3 WHERE id=$1', [betId, payout, JSON.stringify(newResult)]);
@@ -355,7 +514,7 @@ app.post('/api/blackjack/deal', authMiddleware, async (req, res) => {
       if (!rows.length) throw new Error('User not found');
       if (Number(rows[0].balance) < wager) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Insufficient balance' }); }
       const newBalance = Number(rows[0].balance) - wager;
-      await client.query('UPDATE users SET balance=$2 WHERE id=$1', [req.user.id, newBalance]);
+  await client.query('UPDATE users SET balance=$2, peak_balance=GREATEST(peak_balance,$2) WHERE id=$1', [req.user.id, newBalance]);
       const deck = dealBlackjackDeck();
       const playerHand = [deck.pop(), deck.pop()];
       const dealerHand = [deck.pop(), deck.pop()];
@@ -461,7 +620,7 @@ app.post('/api/blackjack/stand', authMiddleware, async (req, res) => {
       if (outcome === 'win') payout = Number((Number(bet.wager) * 2).toFixed(2));
       else if (outcome === 'push') payout = Number(bet.wager);
       if (payout > 0) {
-        await client.query('UPDATE users SET balance = balance + $2 WHERE id=$1', [req.user.id, payout]);
+  await client.query('UPDATE users SET balance = balance + $2, peak_balance=GREATEST(peak_balance, balance + $2) WHERE id=$1', [req.user.id, payout]);
       }
       r.phase = 'finished';
       r.outcome = outcome;
