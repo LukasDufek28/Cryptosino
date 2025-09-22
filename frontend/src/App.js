@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import DiceGame from './DiceGame';
 import CrashGame from './CrashGame';
 import BlackjackGame from './BlackjackGame';
+import AdminDashboard from './AdminDashboard';
 import AuthPage from './AuthPage';
 import NavBar from './NavBar';
 import './NavBar.css';
@@ -14,6 +15,23 @@ function MainPage({ balance, token, setBalance }) {
   const [pingTime, setPingTime] = useState(null);
   const [pingMsg, setPingMsg] = useState('');
   const [loading, setLoading] = useState(false);
+  const [leaders, setLeaders] = useState([]);
+  const [loadingLeaders, setLoadingLeaders] = useState(false);
+
+  useEffect(() => {
+    async function loadLeaders() {
+      setLoadingLeaders(true);
+      try {
+        const res = await fetch(`${API_URL}/api/leaderboard/peak`);
+        const data = await res.json();
+        if (res.ok && Array.isArray(data.leaders)) setLeaders(data.leaders);
+      } catch (e) { /* ignore */ }
+      setLoadingLeaders(false);
+    }
+    loadLeaders();
+    const interval = setInterval(loadLeaders, 15000); // refresh every 15s
+    return () => clearInterval(interval);
+  }, []);
 
   const handleActivate = async () => {
     setLoading(true);
@@ -50,7 +68,8 @@ function MainPage({ balance, token, setBalance }) {
   };
 
   return (
-    <div className="main-container">
+    <div className="home-layout">
+      <div className="main-container">
       <div className="main-title">Cryptosino</div>
       <div className="main-balance">Balance: <b>${balance.toFixed(2)}</b></div>
       <Link className="main-link" to="/dice">🎲 Dice Game</Link>
@@ -86,6 +105,25 @@ function MainPage({ balance, token, setBalance }) {
           Reset Balance to 1000
         </button>
       )}
+      </div>
+      <div className="leaderboard card-right">
+        <div className="leaderboard-title">🏆 Top Peak Balances</div>
+        {loadingLeaders && leaders.length === 0 && (
+          <div className="leaderboard-empty">Loading...</div>
+        )}
+        {!loadingLeaders && leaders.length === 0 && (
+          <div className="leaderboard-empty">No data yet</div>
+        )}
+        <ul className="leaderboard-list">
+          {leaders.map((l, idx) => (
+            <li key={l.username} className="leader-item">
+              <span className="rank">{idx + 1}</span>
+              <span className="lname">{l.username}</span>
+              <span className="lbal">${Number(l.peak_balance).toFixed(2)}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }
@@ -143,10 +181,13 @@ function App() {
     <Router>
       <NavBar user={user} balance={balance} onLogout={handleLogout} />
       <Routes>
-  <Route path="/" element={<MainPage balance={balance} token={token} setBalance={setBalance} />} />
+        <Route path="/" element={<MainPage balance={balance} token={token} setBalance={setBalance} />} />
         <Route path="/dice" element={<DiceGame balance={balance} setBalance={setBalance} token={token} />} />
-  <Route path="/crash" element={<CrashGame balance={balance} setBalance={setBalance} token={token} />} />
-  <Route path="/blackjack" element={<BlackjackGame balance={balance} setBalance={setBalance} token={token} />} />
+        <Route path="/crash" element={<CrashGame balance={balance} setBalance={setBalance} token={token} />} />
+        <Route path="/blackjack" element={<BlackjackGame balance={balance} setBalance={setBalance} token={token} />} />
+        {user?.is_admin && (
+          <Route path="/admin" element={<AdminDashboard token={token} currentUserId={user.id} />} />
+        )}
       </Routes>
     </Router>
   );

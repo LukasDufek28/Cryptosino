@@ -17,14 +17,15 @@ function handValue(hand) {
 function BlackjackGame({ balance, setBalance, token }) {
   const [playerHand, setPlayerHand] = useState([]);
   const [dealerHand, setDealerHand] = useState([]);
-  const [bet, setBet] = useState(10);
+  const [bet, setBet] = useState('10');
   const [message, setMessage] = useState('');
   const [gameState, setGameState] = useState('waiting'); // waiting, playing, finished
   const [finished, setFinished] = useState(false);
   const [betId, setBetId] = useState(null);
 
   const startGame = async () => {
-    if (bet > balance || bet <= 0) {
+    const wager = Number(bet);
+    if (!wager || wager <= 0 || wager > balance) {
       setMessage('Invalid bet amount!');
       return;
     }
@@ -32,7 +33,7 @@ function BlackjackGame({ balance, setBalance, token }) {
       const res = await fetch(`${API_URL}/api/blackjack/deal`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ bet })
+        body: JSON.stringify({ bet: wager })
       });
       const data = await res.json();
       if (!res.ok) { setMessage(data.error || 'Deal failed'); return; }
@@ -51,7 +52,7 @@ function BlackjackGame({ balance, setBalance, token }) {
       const dealer = [deck.pop(), deck.pop()];
       setPlayerHand(player);
       setDealerHand([{...dealer[0]}, {...dealer[1]}]);
-      setBalance(prev => Number((prev - bet).toFixed(2)));
+      setBalance(prev => Number((prev - wager).toFixed(2)));
     }
     setMessage('');
     setGameState('playing');
@@ -136,10 +137,18 @@ function BlackjackGame({ balance, setBalance, token }) {
           <label>
             Bet Amount:
             <input
-              type="number"
-              min="1"
+              type="text"
+              inputMode="decimal"
               value={bet}
-              onChange={e => setBet(Number(e.target.value))}
+              onChange={e => {
+                const v = e.target.value;
+                if (v === '') { setBet(''); return; }
+                if (/^\d*(?:\.\d{0,2})?$/.test(v)) setBet(v);
+              }}
+              onBlur={() => {
+                if (bet === '' || Number(bet) <= 0) setBet('10');
+                else setBet(String(Number(bet)));
+              }}
             />
           </label>
           <button className="blackjack-btn" onClick={startGame}>Deal</button>
