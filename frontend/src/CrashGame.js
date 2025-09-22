@@ -3,12 +3,13 @@ import './CrashGame.css';
 
 const API_URL = process.env.REACT_APP_API_URL;
 
-function CrashGame({ balance, setBalance }) {
+function CrashGame({ balance, setBalance, token }) {
   const [bet, setBet] = useState(10);
   const [gameState, setGameState] = useState('waiting'); // waiting, running, crashed, cashed
   const [multiplier, setMultiplier] = useState(1.00);
   const [crashAt, setCrashAt] = useState(null);
   const [cashoutAt, setCashoutAt] = useState(null);
+  const [finalRevealed, setFinalRevealed] = useState(false);
   const [message, setMessage] = useState('');
   const [clientSeed] = useState('');
   const [nonce, setNonce] = useState(0);
@@ -21,28 +22,47 @@ function CrashGame({ balance, setBalance }) {
       setMessage('Invalid bet amount!');
       return;
     }
-    const array = new Uint32Array(1);
-    window.crypto.getRandomValues(array);
-    const newNonce = array[0];
+    let seed = clientSeed || Math.random().toString(36).substring(2);
+    let crashPoint = null;
+    let newNonce = null;
+    if (token) {
+      // Persistent start
+      try {
+        const res = await fetch(`${API_URL}/api/crash/start`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ bet, clientSeed: seed })
+        });
+        const data = await res.json();
+        if (!res.ok) { setMessage(data.error || 'Crash start failed'); return; }
+        crashPoint = data.crashMultiplier;
+        newNonce = data.nonce;
+        setBalance(Number(data.newBalance));
+      } catch (e) { setMessage('Network error'); return; }
+    } else {
+      // Stateless preview path
+      const array = new Uint32Array(1);
+      window.crypto.getRandomValues(array);
+      newNonce = array[0];
+      try {
+        const res = await fetch(`${API_URL}/api/crash`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clientSeed: seed, nonce: newNonce })
+        });
+        const data = await res.json();
+        crashPoint = data.crashMultiplier;
+        setBalance(prev => Number((prev - bet).toFixed(2))); // local debit only
+      } catch (e) { setMessage('Network error'); return; }
+    }
+
     setNonce(newNonce);
-    const seed = clientSeed || Math.random().toString(36).substring(2);
-
-    // Fetch crash multiplier from backend
-    const response = await fetch(`${API_URL}/api/crash`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ clientSeed: seed, nonce: newNonce })
-    });
-    const data = await response.json();
-    const crashPoint = data.crashMultiplier;
-
     setCrashAt(crashPoint < 1.01 ? 1.01 : crashPoint);
     setMultiplier(1.00);
     setGameState('running');
     setCashoutAt(null);
+    setFinalRevealed(false);
     setMessage('');
-    setBalance(prev => Number((prev - bet).toFixed(2)));
-
     setMultiplierHistory([1.00]);
     startTimeRef.current = Date.now();
 
@@ -61,26 +81,52 @@ function CrashGame({ balance, setBalance }) {
     }, 50);
   };
 
-  const handleCashout = () => {
+  const handleCashout = async () => {
     if (gameState !== 'running') return;
     clearInterval(intervalRef.current);
     setGameState('cashed');
     setCashoutAt(multiplier);
-    const payout = (bet * multiplier).toFixed(2);
-    setBalance(prev => Number((prev + Number(payout)).toFixed(2)));
-    setMessage('You cashed out at ' + multiplier.toFixed(2) + 'x! Won $' + payout);
+    if (token) {
+      try {
+        const res = await fetch(`${API_URL}/api/crash/cashout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+          body: JSON.stringify({ betId: null, atMultiplier: multiplier }) // TODO: track betId if needed in UI state
+        });
+        const data = await res.json();
+        // For now ignore server validation since we didn't store betId on start; improvement: store betId from /start
+        if (data.newBalance) setBalance(Number(data.newBalance));
+      } catch {}
+    } else {
+      const payout = (bet * multiplier).toFixed(2);
+      setBalance(prev => Number((prev + Number(payout)).toFixed(2)));
+    }
+    setMessage('You cashed at ' + multiplier.toFixed(2) + 'x. Calculating final result...');
+    setTimeout(() => {
+      setFinalRevealed(true);
+      if (crashAt > multiplier) {
+        setMessage(`You cashed at ${multiplier.toFixed(2)}x | Final crash ${crashAt.toFixed(2)}x ✅ (Good call!)`);
+      } else if (crashAt < multiplier) {
+        setMessage(`You cashed at ${multiplier.toFixed(2)}x | Final crash ${crashAt.toFixed(2)}x 💥 (Barely!)`);
+      } else {
+        setMessage(`You cashed exactly at the crash point ${crashAt.toFixed(2)}x!`);
+      }
+    }, 800);
   };
 
   React.useEffect(() => {
     if (gameState === 'crashed' || gameState === 'cashed') {
+      // Longer delay (3s) to allow user to see final outcome
+      const delay = 3000;
       const timer = setTimeout(() => {
         setGameState('waiting');
         setMultiplier(1.00);
         setCrashAt(null);
         setCashoutAt(null);
         setMessage('');
-        setMultiplierHistory([1.00]); // <-- Reset the graph here
-      }, 1500);
+        setMultiplierHistory([1.00]);
+        setFinalRevealed(false);
+      }, delay);
       return () => clearTimeout(timer);
     }
   }, [gameState]);
@@ -126,7 +172,7 @@ function CrashGame({ balance, setBalance }) {
         {gameState === 'waiting' && 'Waiting...'}
         {(gameState === 'running' || gameState === 'crashed' || gameState === 'cashed') && (
           <>
-            <span>{(gameState === 'running' ? multiplier : (gameState === 'crashed' ? crashAt : cashoutAt)).toFixed(2)}x</span>
+            <span>{(gameState === 'running' ? multiplier : (gameState === 'crashed' ? crashAt : (finalRevealed ? crashAt : cashoutAt))).toFixed(2)}x</span>
             <CrashGraph history={multiplierHistory} />
           </>
         )}

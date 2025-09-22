@@ -14,73 +14,101 @@ function handValue(hand) {
   return value;
 }
 
-function BlackjackGame({ balance, setBalance }) {
+function BlackjackGame({ balance, setBalance, token }) {
   const [playerHand, setPlayerHand] = useState([]);
   const [dealerHand, setDealerHand] = useState([]);
   const [bet, setBet] = useState(10);
   const [message, setMessage] = useState('');
   const [gameState, setGameState] = useState('waiting'); // waiting, playing, finished
   const [finished, setFinished] = useState(false);
+  const [betId, setBetId] = useState(null);
 
   const startGame = async () => {
     if (bet > balance || bet <= 0) {
       setMessage('Invalid bet amount!');
       return;
     }
-    const res = await fetch(`${API_URL}/api/blackjack/deal`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ bet })
-    });
-    const data = await res.json();
-    setPlayerHand(data.playerHand);
-    setDealerHand(data.dealerHand);
-    setBalance(prev => Number((prev - bet).toFixed(2)));
+    if (token) {
+      const res = await fetch(`${API_URL}/api/blackjack/deal`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ bet })
+      });
+      const data = await res.json();
+      if (!res.ok) { setMessage(data.error || 'Deal failed'); return; }
+      setPlayerHand(data.playerHand);
+      setDealerHand(data.dealerHand);
+      setBetId(data.betId);
+      setBalance(Number(data.newBalance));
+    } else {
+      // Local fallback (non-persistent) simple random deal using existing public endpoint removal (simulate locally)
+      const suits = ['♠','♥','♦','♣'];
+      const values = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+      const deck = [];
+      for (let s of suits) for (let v of values) deck.push({ value: v, suit: s });
+      for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random()* (i+1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
+      const player = [deck.pop(), deck.pop()];
+      const dealer = [deck.pop(), deck.pop()];
+      setPlayerHand(player);
+      setDealerHand([{...dealer[0]}, {...dealer[1]}]);
+      setBalance(prev => Number((prev - bet).toFixed(2)));
+    }
     setMessage('');
     setGameState('playing');
     setFinished(false);
 
     // Auto-stand if player has 21 after deal
-    if (handValue(data.playerHand) === 21) {
-      setTimeout(() => stand(), 500); // slight delay for UI update
+    if (handValue(playerHand) === 21) {
+      setTimeout(() => stand(), 500);
     }
   };
 
   const hit = async () => {
+    if (!token) {
+      // Local fallback not implemented for full logic; simple random card
+      setMessage('Login for persistent blackjack.');
+      return;
+    }
     const res = await fetch(`${API_URL}/api/blackjack/hit`, {
-      method: 'POST'
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ betId })
     });
     const data = await res.json();
+    if (!res.ok) { setMessage(data.error || 'Hit failed'); return; }
     setPlayerHand(data.playerHand);
-    const value = handValue(data.playerHand);
     if (data.finished) {
-      setMessage('Bust! You lose.');
+      if (data.outcome === 'bust') {
+        if (data.dealerHand) setDealerHand(data.dealerHand);
+        setMessage('Bust! You lose.');
+      }
       setGameState('finished');
       setFinished(true);
-    } else if (value === 21) {
-      setTimeout(() => stand(), 500); // auto-stand on 21
+    } else if (data.playerValue === 21) {
+      // Auto stand on 21
+      setTimeout(() => {
+        // Guard: only auto-stand if still playing
+        if (gameState === 'playing') stand();
+      }, 400);
     }
   };
 
   const stand = async () => {
+    if (!token) { setMessage('Login for persistent blackjack.'); return; }
     const res = await fetch(`${API_URL}/api/blackjack/stand`, {
-      method: 'POST'
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ betId })
     });
     const data = await res.json();
+    if (!res.ok) { setMessage(data.error || 'Stand failed'); return; }
     setDealerHand(data.dealerHand);
     let msg = '';
-    let payout = 0;
-    if (data.result === 'win') {
-      msg = 'You win!';
-      payout = bet * 2;
-    } else if (data.result === 'push') {
-      msg = 'Push! Bet returned.';
-      payout = bet;
-    } else {
-      msg = 'You lose!';
-    }
+    if (data.outcome === 'win') msg = 'You win!';
+    else if (data.outcome === 'push') msg = 'Push! Bet returned.';
+    else msg = 'You lose!';
     setMessage(msg);
-    setBalance(prev => Number((prev + payout).toFixed(2)));
+    if (data.newBalance) setBalance(Number(data.newBalance));
     setGameState('finished');
     setFinished(true);
   };
@@ -91,6 +119,7 @@ function BlackjackGame({ balance, setBalance }) {
     setMessage('');
     setGameState('waiting');
     setFinished(false);
+    setBetId(null);
   };
 
   // Message color

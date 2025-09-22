@@ -2,11 +2,36 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const app = express();
 const PORT = process.env.PORT || 5000;
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
+
+// Database
+const { query } = require('./db');
 
 app.use(cors());
 app.use(express.json());
+
+// Auth helpers
+function signToken(user) {
+  return jwt.sign({ id: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
+}
+
+async function authMiddleware(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).json({ error: 'Missing Authorization header' });
+  const token = authHeader.split(' ')[1];
+  if (!token) return res.status(401).json({ error: 'Invalid Authorization header' });
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    req.user = payload;
+    next();
+  } catch (e) {
+    return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+}
 
 // Example route
 app.get('/', (req, res) => {
@@ -17,13 +42,88 @@ app.get('/api/ping', (req, res) => {
   res.json({ "message": "Yes Sir" });
 });
 
+// DB connectivity test
+app.get('/api/db-time', async (req, res) => {
+  try {
+    const result = await query('SELECT NOW() as now');
+    res.json({ ok: true, now: result.rows[0].now });
+  } catch (err) {
+    console.error('DB test error', err.message);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// Registration
+app.post('/api/register', async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'Username & password required' });
+  if (password.length < 6) return res.status(400).json({ error: 'Password too short (min 6)' });
+  try {
+    const hash = await bcrypt.hash(password, 10);
+    const { rows } = await query(
+      `INSERT INTO users (username, password_hash) VALUES ($1,$2)
+       ON CONFLICT (username) DO NOTHING
+       RETURNING id, username, balance, created_at`,
+      [username, hash]
+    );
+    if (!rows.length) return res.status(409).json({ error: 'Username already exists' });
+    const user = rows[0];
+    const token = signToken(user);
+    res.json({ token, user });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Login
+app.post('/api/login', async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'Username & password required' });
+  try {
+    const { rows } = await query('SELECT id, username, password_hash, balance, created_at FROM users WHERE username=$1', [username]);
+    if (!rows.length) return res.status(401).json({ error: 'Invalid credentials' });
+    const user = rows[0];
+    const ok = await bcrypt.compare(password, user.password_hash);
+    if (!ok) return res.status(401).json({ error: 'Invalid credentials' });
+    delete user.password_hash;
+    const token = signToken(user);
+    res.json({ token, user });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Current user
+app.get('/api/me', authMiddleware, async (req, res) => {
+  try {
+    const { rows } = await query('SELECT id, username, balance, created_at FROM users WHERE id=$1', [req.user.id]);
+    if (!rows.length) return res.status(404).json({ error: 'User not found' });
+    res.json({ user: rows[0] });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Reset balance to 1000 if current balance < 1000
+app.post('/api/reset-balance', authMiddleware, async (req, res) => {
+  try {
+    const { rows } = await query('SELECT id, balance FROM users WHERE id=$1', [req.user.id]);
+    if (!rows.length) return res.status(404).json({ error: 'User not found' });
+    const current = Number(rows[0].balance);
+    if (current >= 1000) {
+      return res.status(400).json({ error: 'Balance is already 1000 or higher' });
+    }
+    await query('UPDATE users SET balance=1000.00 WHERE id=$1', [req.user.id]);
+    res.json({ ok: true, balance: 1000.00 });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Provably fair dice roll endpoint
 app.post('/api/roll', (req, res) => {
   const { clientSeed, winChance, nonce } = req.body;
-
-  // Generate or use a fixed server seed for demo (in production, keep it secret and rotate per session/user)
   const serverSeed = process.env.SERVER_SEED;
-  // Include nonce in the hash for uniqueness
   const hash = crypto.createHash('sha256')
     .update(serverSeed + ':' + clientSeed + ':' + nonce)
     .digest('hex');
@@ -39,37 +139,165 @@ app.post('/api/roll', (req, res) => {
   });
 });
 
+// Persistent dice (requires auth) expects: { bet, winChance, clientSeed }
+app.post('/api/dice/roll', authMiddleware, async (req, res) => {
+  const { bet, winChance, clientSeed } = req.body;
+  const wager = Number(bet);
+  const chance = Number(winChance);
+  if (!wager || wager <= 0) return res.status(400).json({ error: 'Invalid bet' });
+  if (chance < 2 || chance > 98) return res.status(400).json({ error: 'Invalid winChance' });
+  try {
+    const client = await require('./db').getClient();
+    try {
+      await client.query('BEGIN');
+      const { rows: userRows } = await client.query('SELECT id, balance FROM users WHERE id=$1 FOR UPDATE', [req.user.id]);
+      if (!userRows.length) throw new Error('User not found');
+      const user = userRows[0];
+      if (Number(user.balance) < wager) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Insufficient balance' });
+      }
+      const nonce = Math.floor(Math.random() * 1e9);
+      const serverSeed = process.env.SERVER_SEED;
+      const seedToUse = clientSeed || Math.random().toString(36).slice(2);
+      const hash = crypto.createHash('sha256')
+        .update(serverSeed + ':' + seedToUse + ':' + nonce)
+        .digest('hex');
+      const rollVal = parseInt(hash.slice(0, 8), 16) / 0xffffffff * 100;
+      const win = rollVal < chance;
+      const payoutMultiplier = (99 / chance) * 0.99;
+      let payout = 0;
+      let newBalance = Number(user.balance) - wager;
+      if (win) {
+        payout = Number((wager * payoutMultiplier).toFixed(2));
+        newBalance += payout;
+      }
+      await client.query('UPDATE users SET balance=$2 WHERE id=$1', [user.id, newBalance]);
+      await client.query(
+        'INSERT INTO bets (user_id, game, wager, payout, result) VALUES ($1,$2,$3,$4,$5)',
+        [user.id, 'dice', wager, payout, JSON.stringify({ roll: rollVal.toFixed(2), win, winChance: chance })]
+      );
+      await client.query('COMMIT');
+      res.json({
+        roll: rollVal.toFixed(2),
+        win,
+        payout: payout.toFixed(2),
+        newBalance: newBalance.toFixed(2),
+        serverSeedHash: crypto.createHash('sha256').update(serverSeed).digest('hex'),
+        clientSeed: seedToUse,
+        winChance: chance,
+        nonce
+      });
+    } catch (e) {
+      try { await client.query('ROLLBACK'); } catch {}
+      console.error('Persistent dice error', e.message);
+      res.status(500).json({ error: e.message });
+    } finally {
+      client.release();
+    }
+  } catch (outer) {
+    res.status(500).json({ error: outer.message });
+  }
+});
+
 // Provably fair crash calculation (Bustabit/Stake style)
+// Public crash calc (stateless) retained for non-auth preview
 app.post('/api/crash', (req, res) => {
   const { clientSeed, nonce } = req.body;
   const serverSeed = process.env.SERVER_SEED;
-
-  const hash = crypto.createHash('sha256')
-    .update(serverSeed + ':' + clientSeed + ':' + nonce)
-    .digest('hex');
-  const h = parseInt(hash.slice(0, 13), 16); // 52 bits
-
-  if (h % 33 === 0) {
-    return res.json({
-      crashMultiplier: 0,
-      serverSeedHash: crypto.createHash('sha256').update(serverSeed).digest('hex'),
-      clientSeed,
-      nonce
-    });
+  const seed = clientSeed || 'anon';
+  const n = Number(nonce) || 0;
+  const hash = crypto.createHash('sha256').update(serverSeed + ':' + seed + ':' + n).digest('hex');
+  const h = parseInt(hash.slice(0, 13), 16);
+  let crashMultiplier;
+  if (h % 33 === 0) crashMultiplier = 0; else {
+    const X = h / Math.pow(2, 52);
+    crashMultiplier = Math.floor((1 / (1 - X)) * 100) / 100;
+    if (crashMultiplier < 1.01) crashMultiplier = 1.01;
   }
-
-  const X = h / Math.pow(2, 52);
-  const crashMultiplier = Math.floor((1 / (1 - X)) * 100) / 100;
-
-  res.json({
-    crashMultiplier: crashMultiplier < 1.01 ? 1.01 : crashMultiplier,
-    serverSeedHash: crypto.createHash('sha256').update(serverSeed).digest('hex'),
-    clientSeed,
-    nonce
-  });
+  res.json({ crashMultiplier, serverSeedHash: crypto.createHash('sha256').update(serverSeed).digest('hex'), clientSeed: seed, nonce: n });
 });
 
-let blackjackState = null; // In-memory state for demo (use sessions/db for real app)
+// Authenticated persistent crash round start: debit bet & pre-generate crash multiplier
+// Request: { bet, clientSeed }
+app.post('/api/crash/start', authMiddleware, async (req, res) => {
+  const { bet, clientSeed } = req.body;
+  const wager = Number(bet);
+  if (!wager || wager <= 0) return res.status(400).json({ error: 'Invalid bet' });
+  const serverSeed = process.env.SERVER_SEED;
+  const seed = clientSeed || Math.random().toString(36).slice(2);
+  const nonce = Math.floor(Math.random() * 1e9);
+  // Deterministic crash point
+  const hash = crypto.createHash('sha256').update(serverSeed + ':' + seed + ':' + nonce).digest('hex');
+  const h = parseInt(hash.slice(0, 13), 16);
+  let crashMultiplier;
+  if (h % 33 === 0) crashMultiplier = 0; else {
+    const X = h / Math.pow(2, 52);
+    crashMultiplier = Math.floor((1 / (1 - X)) * 100) / 100;
+    if (crashMultiplier < 1.01) crashMultiplier = 1.01;
+  }
+  try {
+    const client = await require('./db').getClient();
+    try {
+      await client.query('BEGIN');
+      const { rows } = await client.query('SELECT id, balance FROM users WHERE id=$1 FOR UPDATE', [req.user.id]);
+      if (!rows.length) throw new Error('User not found');
+      const user = rows[0];
+      if (Number(user.balance) < wager) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Insufficient balance' }); }
+      const newBalance = Number(user.balance) - wager;
+      await client.query('UPDATE users SET balance=$2 WHERE id=$1', [user.id, newBalance]);
+      // Record bet with temporary result (cashout handled later)
+      const result = { phase: 'started', crashMultiplier, clientSeed: seed, nonce };
+      const betInsert = await client.query('INSERT INTO bets (user_id, game, wager, payout, result) VALUES ($1,$2,$3,$4,$5) RETURNING id', [user.id, 'crash', wager, 0, JSON.stringify(result)]);
+      await client.query('COMMIT');
+      res.json({ ok: true, betId: betInsert.rows[0].id, crashMultiplier, nonce, clientSeed: seed, serverSeedHash: crypto.createHash('sha256').update(serverSeed).digest('hex'), newBalance: newBalance.toFixed(2) });
+    } catch (e) { try { await client.query('ROLLBACK'); } catch {} res.status(500).json({ error: e.message }); }
+    finally { client.release(); }
+  } catch (outer) { res.status(500).json({ error: outer.message }); }
+});
+
+// Crash cashout: { betId, atMultiplier }
+app.post('/api/crash/cashout', authMiddleware, async (req, res) => {
+  const { betId, atMultiplier } = req.body;
+  const m = Number(atMultiplier);
+  if (!betId || !m || m < 1) return res.status(400).json({ error: 'Invalid request' });
+  try {
+    const client = await require('./db').getClient();
+    try {
+      await client.query('BEGIN');
+      const betRow = await client.query('SELECT * FROM bets WHERE id=$1 AND user_id=$2 FOR UPDATE', [betId, req.user.id]);
+      if (!betRow.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Bet not found' }); }
+      const bet = betRow.rows[0];
+      if (bet.game !== 'crash') { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Not a crash bet' }); }
+      const r = bet.result || {}; // JSONB
+      if (r.phase !== 'started') { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Already finalized' }); }
+      const crashMultiplier = r.crashMultiplier;
+      let payout = 0;
+      let outcome = 'crashed';
+      if (crashMultiplier === 0) {
+        // Instant crash
+        payout = 0;
+      } else if (m < crashMultiplier) {
+        payout = Number((Number(bet.wager) * m).toFixed(2));
+        outcome = 'cashed';
+      } else if (m >= crashMultiplier) {
+        // Cashed exactly or after crash -> lose
+        payout = 0;
+      }
+      if (payout > 0) {
+        await client.query('UPDATE users SET balance = balance + $2 WHERE id=$1', [req.user.id, payout]);
+      }
+      const newResult = { phase: 'finished', crashMultiplier, cashedAt: outcome === 'cashed' ? m : null, outcome };
+      await client.query('UPDATE bets SET payout=$2, result=$3 WHERE id=$1', [betId, payout, JSON.stringify(newResult)]);
+      const balRow = await client.query('SELECT balance FROM users WHERE id=$1', [req.user.id]);
+      await client.query('COMMIT');
+      res.json({ ok: true, outcome, crashMultiplier, cashedAt: outcome === 'cashed' ? m : null, payout: payout.toFixed(2), newBalance: Number(balRow.rows[0].balance).toFixed(2) });
+    } catch (e) { try { await client.query('ROLLBACK'); } catch {} res.status(500).json({ error: e.message }); }
+    finally { client.release(); }
+  } catch (outer) { res.status(500).json({ error: outer.message }); }
+});
+
+let blackjackState = null; // Deprecated for persistent mode
 
 function getDeck() {
   const suits = ['♠', '♥', '♦', '♣'];
@@ -108,57 +336,176 @@ function calculateHandValue(hand) {
   return value;
 }
 
-// Start a new game
-app.post('/api/blackjack/deal', (req, res) => {
-  const { bet } = req.body;
+// Persistent Blackjack implementation (auth required)
+function dealBlackjackDeck() {
   const deck = getDeck();
-  const playerHand = [deck.pop(), deck.pop()];
-  const dealerHand = [deck.pop(), deck.pop()];
-  blackjackState = { deck, playerHand, dealerHand, bet, finished: false };
-  res.json({
-    playerHand,
-    dealerHand: [dealerHand[0], { value: '?', suit: '?' }], // Hide dealer's second card
-    playerValue: calculateHandValue(playerHand),
-    dealerValue: getCardValue(dealerHand[0]),
-    finished: false
-  });
+  return deck;
+}
+
+// Start persistent blackjack hand: { bet }
+app.post('/api/blackjack/deal', authMiddleware, async (req, res) => {
+  const { bet } = req.body;
+  const wager = Number(bet);
+  if (!wager || wager <= 0) return res.status(400).json({ error: 'Invalid bet' });
+  try {
+    const client = await require('./db').getClient();
+    try {
+      await client.query('BEGIN');
+      const { rows } = await client.query('SELECT id, balance FROM users WHERE id=$1 FOR UPDATE', [req.user.id]);
+      if (!rows.length) throw new Error('User not found');
+      if (Number(rows[0].balance) < wager) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Insufficient balance' }); }
+      const newBalance = Number(rows[0].balance) - wager;
+      await client.query('UPDATE users SET balance=$2 WHERE id=$1', [req.user.id, newBalance]);
+      const deck = dealBlackjackDeck();
+      const playerHand = [deck.pop(), deck.pop()];
+      const dealerHand = [deck.pop(), deck.pop()];
+      const resultObj = { phase: 'playing', playerHand, dealerHand: [dealerHand[0], { hidden: true }], fullDealer: dealerHand, wager };
+      const betInsert = await client.query('INSERT INTO bets (user_id, game, wager, payout, result) VALUES ($1,$2,$3,$4,$5) RETURNING id', [req.user.id, 'blackjack', wager, 0, JSON.stringify(resultObj)]);
+      await client.query('COMMIT');
+      res.json({ ok: true, betId: betInsert.rows[0].id, playerHand, dealerHand: [dealerHand[0], { value: '?', suit: '?' }], playerValue: calculateHandValue(playerHand), dealerValue: getCardValue(dealerHand[0]), newBalance: newBalance.toFixed(2) });
+    } catch (e) { try { await client.query('ROLLBACK'); } catch {} res.status(500).json({ error: e.message }); }
+    finally { client.release(); }
+  } catch (outer) { res.status(500).json({ error: outer.message }); }
 });
 
-// Player hits
-app.post('/api/blackjack/hit', (req, res) => {
-  if (!blackjackState || blackjackState.finished) return res.status(400).json({ error: 'No game in progress' });
-  blackjackState.playerHand.push(blackjackState.deck.pop());
-  const playerValue = calculateHandValue(blackjackState.playerHand);
-  if (playerValue > 21) blackjackState.finished = true;
-  res.json({
-    playerHand: blackjackState.playerHand,
-    playerValue,
-    finished: blackjackState.finished
-  });
+// Hit: { betId }
+app.post('/api/blackjack/hit', authMiddleware, async (req, res) => {
+  const { betId } = req.body;
+  if (!betId) return res.status(400).json({ error: 'Missing betId' });
+  try {
+    const { getClient } = require('./db');
+    const client = await getClient();
+    try {
+      await client.query('BEGIN');
+      const betRow = await client.query('SELECT * FROM bets WHERE id=$1 AND user_id=$2 FOR UPDATE', [betId, req.user.id]);
+      if (!betRow.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Bet not found' }); }
+      const bet = betRow.rows[0];
+      if (bet.game !== 'blackjack') { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Not blackjack bet' }); }
+      const r = bet.result;
+      if (!r || r.phase !== 'playing') { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Hand finished' }); }
+      // Reconstruct deck from remaining unseen cards (simple approach: regenerate and remove known). For simplicity we store deck? If not stored, create new deck minus cards.
+      // Simpler: store remaining deck inside result on first modify.
+      if (!r.deck) {
+        // Build new deck and remove dealt cards
+        const fresh = getDeck();
+        const used = [...r.playerHand, ...r.fullDealer];
+        for (const u of used) {
+          const idx = fresh.findIndex(card => card.value === u.value && card.suit === u.suit);
+          if (idx >= 0) fresh.splice(idx, 1);
+        }
+        r.deck = fresh;
+      }
+      const nextCard = r.deck.pop();
+      r.playerHand.push(nextCard);
+      const playerValue = calculateHandValue(r.playerHand);
+      let finished = false;
+      let outcome = null;
+      if (playerValue > 21) {
+        // Player busts - only reveal dealer's original two cards (no drawing)
+        if (!r.dealerHandFinal) {
+          r.dealerHandFinal = r.fullDealer.slice(0, 2);
+        }
+        finished = true;
+        outcome = 'bust';
+        r.phase = 'finished';
+        r.outcome = outcome;
+      }
+      await client.query('UPDATE bets SET result=$2 WHERE id=$1', [betId, JSON.stringify(r)]);
+      await client.query('COMMIT');
+      const payload = { ok: true, playerHand: r.playerHand, playerValue, finished, outcome };
+      if (finished) {
+        payload.dealerHand = r.dealerHandFinal || r.fullDealer;
+        payload.dealerValue = calculateHandValue(r.dealerHandFinal || r.fullDealer);
+      }
+      res.json(payload);
+    } catch (e) { try { await client.query('ROLLBACK'); } catch {} res.status(500).json({ error: e.message }); }
+    finally { client.release(); }
+  } catch (outer) { res.status(500).json({ error: outer.message }); }
 });
 
-// Player stands
-app.post('/api/blackjack/stand', (req, res) => {
-  if (!blackjackState || blackjackState.finished) return res.status(400).json({ error: 'No game in progress' });
-  // Dealer draws
-  while (calculateHandValue(blackjackState.dealerHand) < 17) {
-    blackjackState.dealerHand.push(blackjackState.deck.pop());
-  }
-  const playerValue = calculateHandValue(blackjackState.playerHand);
-  const dealerValue = calculateHandValue(blackjackState.dealerHand);
-  blackjackState.finished = true;
-  let result = '';
-  if (dealerValue > 21 || playerValue > dealerValue) result = 'win';
-  else if (playerValue === dealerValue) result = 'push';
-  else result = 'lose';
-  res.json({
-    dealerHand: blackjackState.dealerHand,
-    dealerValue,
-    playerValue,
-    result,
-    finished: true
-  });
+// Stand: { betId }
+app.post('/api/blackjack/stand', authMiddleware, async (req, res) => {
+  const { betId } = req.body;
+  if (!betId) return res.status(400).json({ error: 'Missing betId' });
+  try {
+    const client = await require('./db').getClient();
+    try {
+      await client.query('BEGIN');
+      const betRow = await client.query('SELECT * FROM bets WHERE id=$1 AND user_id=$2 FOR UPDATE', [betId, req.user.id]);
+      if (!betRow.rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Bet not found' }); }
+      const bet = betRow.rows[0];
+      if (bet.game !== 'blackjack') { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Not blackjack bet' }); }
+      const r = bet.result;
+      if (!r || r.phase !== 'playing') { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Hand finished' }); }
+      if (!r.deck) {
+        const fresh = getDeck();
+        const used = [...r.playerHand, ...r.fullDealer];
+        for (const u of used) {
+          const idx = fresh.findIndex(card => card.value === u.value && card.suit === u.suit);
+          if (idx >= 0) fresh.splice(idx, 1);
+        }
+        r.deck = fresh;
+      }
+      // Dealer reveal & draw
+      const dealerHand = r.fullDealer;
+      while (calculateHandValue(dealerHand) < 17) {
+        dealerHand.push(r.deck.pop());
+      }
+      const playerValue = calculateHandValue(r.playerHand);
+      const dealerValue = calculateHandValue(dealerHand);
+      let outcome;
+      if (dealerValue > 21 || playerValue > dealerValue) outcome = 'win';
+      else if (playerValue === dealerValue) outcome = 'push';
+      else outcome = 'lose';
+      let payout = 0;
+      if (outcome === 'win') payout = Number((Number(bet.wager) * 2).toFixed(2));
+      else if (outcome === 'push') payout = Number(bet.wager);
+      if (payout > 0) {
+        await client.query('UPDATE users SET balance = balance + $2 WHERE id=$1', [req.user.id, payout]);
+      }
+      r.phase = 'finished';
+      r.outcome = outcome;
+      r.dealerHandFinal = dealerHand;
+      await client.query('UPDATE bets SET payout=$2, result=$3 WHERE id=$1', [betId, payout, JSON.stringify(r)]);
+      const balRow = await client.query('SELECT balance FROM users WHERE id=$1', [req.user.id]);
+      await client.query('COMMIT');
+      res.json({ ok: true, dealerHand, dealerValue, playerValue, outcome, payout: payout.toFixed(2), newBalance: Number(balRow.rows[0].balance).toFixed(2) });
+    } catch (e) { try { await client.query('ROLLBACK'); } catch {} res.status(500).json({ error: e.message }); }
+    finally { client.release(); }
+  } catch (outer) { res.status(500).json({ error: outer.message }); }
 });
+
+// Development-only route inspector (do NOT enable in production without auth)
+if (process.env.NODE_ENV !== 'production') {
+  app.get('/api/_routes', (req, res) => {
+    const collected = [];
+    const pushRoute = (method, path) => collected.push({ method, path });
+    try {
+      if (app._router && app._router.stack) {
+        app._router.stack.forEach(layer => {
+          if (layer.route && layer.route.path) {
+            const methods = layer.route.methods || {};
+            Object.keys(methods).forEach(m => {
+              if (methods[m]) pushRoute(m.toUpperCase(), layer.route.path);
+            });
+          } else if (layer.name === 'router' && layer.handle && layer.handle.stack) {
+            layer.handle.stack.forEach(sub => {
+              if (sub.route && sub.route.path) {
+                const methods = sub.route.methods || {};
+                Object.keys(methods).forEach(m => {
+                  if (methods[m]) pushRoute(m.toUpperCase(), sub.route.path);
+                });
+              }
+            });
+          }
+        });
+      }
+      res.json({ count: collected.length, routes: collected });
+    } catch (e) {
+      res.status(500).json({ error: 'Failed to enumerate routes', details: e.message });
+    }
+  });
+}
 
 // Start the server
 app.listen(PORT, () => {

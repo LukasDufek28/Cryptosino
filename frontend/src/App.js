@@ -1,13 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import DiceGame from './DiceGame';
 import CrashGame from './CrashGame';
 import BlackjackGame from './BlackjackGame';
+import AuthPage from './AuthPage';
+import NavBar from './NavBar';
+import './NavBar.css';
 import './MainPage.css';
 
 const API_URL = process.env.REACT_APP_API_URL;
 
-function MainPage({ balance }) {
+function MainPage({ balance, token, setBalance }) {
   const [pingTime, setPingTime] = useState(null);
   const [pingMsg, setPingMsg] = useState('');
   const [loading, setLoading] = useState(false);
@@ -26,6 +29,24 @@ function MainPage({ balance }) {
       setPingMsg('Failed to reach backend.');
     }
     setLoading(false);
+  };
+
+  const handleReset = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_URL}/api/reset-balance`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setBalance(Number(data.balance));
+      } else {
+        alert(data.error || 'Reset failed');
+      }
+    } catch (e) {
+      alert('Network error');
+    }
   };
 
   return (
@@ -57,20 +78,75 @@ function MainPage({ balance }) {
           </div>
         )}
       </div>
+      {balance < 1000 && (
+        <button
+          onClick={handleReset}
+          style={{ marginTop: 16, padding: '10px 16px', background: '#222', color: '#fff', border: '1px solid #444', borderRadius: 6, cursor: 'pointer' }}
+        >
+          Reset Balance to 1000
+        </button>
+      )}
     </div>
   );
 }
 
 function App() {
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(localStorage.getItem('token'));
   const [balance, setBalance] = useState(1000);
+  const [loadingUser, setLoadingUser] = useState(false);
+
+  useEffect(() => {
+    async function loadMe() {
+      if (!token) return;
+      setLoadingUser(true);
+      try {
+        const res = await fetch(`${API_URL}/api/me`, { headers: { Authorization: `Bearer ${token}` } });
+        if (res.ok) {
+          const data = await res.json();
+          setUser(data.user);
+          setBalance(Number(data.user.balance));
+        } else {
+          localStorage.removeItem('token');
+          setToken(null);
+        }
+      } catch (e) {
+        // ignore
+      }
+      setLoadingUser(false);
+    }
+    loadMe();
+  }, [token]);
+
+  const handleAuth = (userData, jwt) => {
+    setUser(userData);
+    setToken(jwt);
+    setBalance(Number(userData.balance));
+  };
+
+  if (!token || !user) {
+    if (loadingUser) {
+      return <div style={{ color: '#fff', padding: 40 }}>Loading...</div>;
+    }
+    return <AuthPage onAuth={handleAuth} />;
+  }
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    setToken(null);
+    setUser(null);
+    // Do not auto-reset balance on logout; leave it or set to 0 for a neutral state
+    setBalance(0);
+  };
 
   return (
     <Router>
+      <NavBar user={user} balance={balance} onLogout={handleLogout} />
       <Routes>
-        <Route path="/" element={<MainPage balance={balance} />} />
-        <Route path="/dice" element={<DiceGame balance={balance} setBalance={setBalance} />} />
-        <Route path="/crash" element={<CrashGame balance={balance} setBalance={setBalance} />} />
-        <Route path="/blackjack" element={<BlackjackGame balance={balance} setBalance={setBalance} />} />
+  <Route path="/" element={<MainPage balance={balance} token={token} setBalance={setBalance} />} />
+        <Route path="/dice" element={<DiceGame balance={balance} setBalance={setBalance} token={token} />} />
+  <Route path="/crash" element={<CrashGame balance={balance} setBalance={setBalance} token={token} />} />
+  <Route path="/blackjack" element={<BlackjackGame balance={balance} setBalance={setBalance} token={token} />} />
       </Routes>
     </Router>
   );
