@@ -1,0 +1,10 @@
+.nav-bar {display:flex;align-items:center;justify-content:space-between;padding:8px 16px;background:#161616;border-bottom:1px solid #2a2a2a;font-family:inherit;}
+.nav-left {display:flex;align-items:center;gap:12px;}
+.nav-logo {font-weight:700;letter-spacing:1px;color:#0ff;font-size:18px;}
+.nav-link {color:#ccc;text-decoration:none;padding:4px 8px;border-radius:4px;transition:background .15s,color .15s;}
+.nav-link:hover {background:#242424;color:#fff;}
+.nav-right {display:flex;align-items:center;gap:12px;}
+.nav-user {color:#8fd;}
+.nav-balance {color:#0f8;font-weight:600;}
+.nav-logout {background:#2d2d2d;color:#eee;border:1px solid #444;padding:4px 10px;border-radius:4px;cursor:pointer;}
+.nav-logout:hover {background:#3a3a3a;}

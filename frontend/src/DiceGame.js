@@ -3,7 +3,7 @@ import './DiceGame.css';
 
 const API_URL = process.env.REACT_APP_API_URL;
 
-function DiceGame({ balance, setBalance }) {
+function DiceGame({ balance, setBalance, token }) {
   const [winChance, setWinChance] = useState(50);
   const [clientSeed, setClientSeed] = useState('');
   const [result, setResult] = useState(null);
@@ -21,23 +21,42 @@ function DiceGame({ balance, setBalance }) {
       setAutoRolling(false); // Stop auto roll if invalid
       return;
     }
-    const seed = clientSeed || Math.random().toString(36).substring(2);
-    const nonce = Math.floor(Math.random() * 1e9);
-    const response = await fetch(`${API_URL}/api/roll`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ clientSeed: seed, winChance: Number(winChance), nonce })
-    });
-    const data = await response.json();
-
-    let newBalance = balance - bet;
-    if (data.win) {
-      newBalance += bet * payoutMultiplier;
+    if (token) {
+      // Use persistent backend endpoint
+      const response = await fetch(`${API_URL}/api/dice/roll`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ bet, winChance: Number(winChance), clientSeed })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        alert(data.error || 'Error');
+        setAutoRolling(false);
+        return;
+      }
+      setBalance(Number(data.newBalance));
+      setResult({ roll: data.roll, win: data.win, payout: data.payout, clientSeed: data.clientSeed, nonce: data.nonce });
+      setClientSeed(data.clientSeed);
+    } else {
+      // Fallback local simulation (no persistence)
+      const seed = clientSeed || Math.random().toString(36).substring(2);
+      const nonce = Math.floor(Math.random() * 1e9);
+      const response = await fetch(`${API_URL}/api/roll`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientSeed: seed, winChance: Number(winChance), nonce })
+      });
+      const data = await response.json();
+      let newBalance = balance - bet;
+      if (data.win) newBalance += bet * payoutMultiplier;
+      setBalance(Number(newBalance.toFixed(2)));
+      setResult({ ...data, payout: data.win ? (bet * payoutMultiplier).toFixed(2) : 0 });
+      setClientSeed(seed);
     }
-    setBalance(Number(newBalance.toFixed(2)));
-    setResult({ ...data, payout: data.win ? (bet * payoutMultiplier).toFixed(2) : 0 });
-    setClientSeed(seed);
-  }, [bet, balance, clientSeed, payoutMultiplier, setBalance, winChance]);
+  }, [API_URL, balance, bet, clientSeed, payoutMultiplier, setBalance, token, winChance]);
 
   // Auto roll logic
   React.useEffect(() => {
