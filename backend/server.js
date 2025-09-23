@@ -14,14 +14,9 @@ const { query } = require('./db');
 app.use(cors());
 app.use(express.json());
 
-// Auth helpers
+// Auth helpers (refresh role flags each request to avoid stale tokens)
 function signToken(user) {
-  return jwt.sign({ id: user.id, username: user.username, is_admin: !!user.is_admin }, JWT_SECRET, { expiresIn: '7d' });
-}
-
-function adminOnly(req, res, next) {
-  if (!req.user || !req.user.is_admin) return res.status(403).json({ error: 'Admin only' });
-  next();
+  return jwt.sign({ id: user.id, username: user.username, is_admin: !!user.is_admin, is_owner: !!user.is_owner }, JWT_SECRET, { expiresIn: '7d' });
 }
 
 async function authMiddleware(req, res, next) {
@@ -31,11 +26,24 @@ async function authMiddleware(req, res, next) {
   if (!token) return res.status(401).json({ error: 'Invalid Authorization header' });
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    req.user = payload;
+    // Refresh role flags and username in case of promotion/demotion/name change
+    const fresh = await query('SELECT id, username, is_admin, COALESCE(is_owner,false) AS is_owner FROM users WHERE id=$1', [payload.id]);
+    if (!fresh.rows.length) return res.status(401).json({ error: 'User no longer exists' });
+    req.user = {
+      id: fresh.rows[0].id,
+      username: fresh.rows[0].username,
+      is_admin: !!fresh.rows[0].is_admin,
+      is_owner: !!fresh.rows[0].is_owner
+    };
     next();
   } catch (e) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
+}
+
+function adminOnly(req, res, next) {
+  if (!req.user || (!req.user.is_admin && !req.user.is_owner)) return res.status(403).json({ error: 'Admin only' });
+  next();
 }
 
 // Example route
@@ -115,6 +123,26 @@ app.get('/api/leaderboard/peak', async (req, res) => {
     const { rows } = await query('SELECT username, peak_balance FROM users ORDER BY peak_balance DESC, id ASC LIMIT 10');
     res.json({ leaders: rows });
   } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Net profit leaderboard (top 10) include users even with zero bets
+app.get('/api/leaderboard/net-profit', async (req, res) => {
+  try {
+    const sql = `SELECT u.username,
+        COALESCE(SUM(b.payout),0) - COALESCE(SUM(b.wager),0) AS net_profit,
+        COALESCE(SUM(b.wager),0) AS total_wagered,
+        COALESCE(SUM(b.payout),0) AS total_payout
+      FROM users u
+      LEFT JOIN bets b ON b.user_id = u.id
+      GROUP BY u.id
+      ORDER BY net_profit DESC, u.id ASC
+      LIMIT 10`;
+    const { rows } = await query(sql);
+    res.json({ leaders: rows });
+  } catch (e) {
+    console.error('Net profit leaderboard error', e.message);
     res.status(500).json({ error: e.message });
   }
 });
@@ -279,21 +307,32 @@ app.post('/api/reset-balance', authMiddleware, async (req, res) => {
   }
 });
 
-// Provably fair dice roll endpoint
+// Dice configuration
+const DICE_HOUSE_EDGE = 0.01; // 1% house edge similar to Stake
+// Multiplier formula (Stake-style): (100 - house_edge_percent) / winChance
+// Here house_edge_percent = 100 * DICE_HOUSE_EDGE => 1; effectively 99 / chance.
+
+// Provably fair public dice roll endpoint (stateless)
 app.post('/api/roll', (req, res) => {
   const { clientSeed, winChance, nonce } = req.body;
+  const chance = Number(winChance);
+  if (isNaN(chance) || chance < 0 || chance > 100) {
+    return res.status(400).json({ error: 'Invalid winChance' });
+  }
   const serverSeed = process.env.SERVER_SEED;
   const hash = crypto.createHash('sha256')
     .update(serverSeed + ':' + clientSeed + ':' + nonce)
     .digest('hex');
   const roll = parseInt(hash.slice(0, 8), 16) / 0xffffffff * 100;
-  const win = roll < winChance;
+  const win = roll < chance;
+  const multiplier = chance > 0 ? (100 - (DICE_HOUSE_EDGE * 100)) / chance : 0;
   res.json({
     roll: roll.toFixed(2),
     win,
+    multiplier: Number(multiplier.toFixed(6)),
     serverSeedHash: crypto.createHash('sha256').update(serverSeed).digest('hex'),
     clientSeed,
-    winChance,
+    winChance: chance,
     nonce
   });
 });
@@ -304,7 +343,7 @@ app.post('/api/dice/roll', authMiddleware, async (req, res) => {
   const wager = Number(bet);
   const chance = Number(winChance);
   if (!wager || wager <= 0) return res.status(400).json({ error: 'Invalid bet' });
-  if (chance < 2 || chance > 98) return res.status(400).json({ error: 'Invalid winChance' });
+  if (isNaN(chance) || chance < 0 || chance > 100) return res.status(400).json({ error: 'Invalid winChance' });
   try {
     const client = await require('./db').getClient();
     try {
@@ -324,7 +363,10 @@ app.post('/api/dice/roll', authMiddleware, async (req, res) => {
         .digest('hex');
       const rollVal = parseInt(hash.slice(0, 8), 16) / 0xffffffff * 100;
       const win = rollVal < chance;
-      const payoutMultiplier = (99 / chance) * 0.99;
+      let payoutMultiplier = 0;
+      if (chance > 0) {
+        payoutMultiplier = (100 - (DICE_HOUSE_EDGE * 100)) / chance; // 99 / chance
+      }
       let payout = 0;
       let newBalance = Number(user.balance) - wager;
       if (win) {
@@ -341,6 +383,7 @@ app.post('/api/dice/roll', authMiddleware, async (req, res) => {
         roll: rollVal.toFixed(2),
         win,
         payout: payout.toFixed(2),
+        multiplier: Number(payoutMultiplier.toFixed(6)),
         newBalance: newBalance.toFixed(2),
         serverSeedHash: crypto.createHash('sha256').update(serverSeed).digest('hex'),
         clientSeed: seedToUse,
@@ -520,6 +563,48 @@ app.post('/api/blackjack/deal', authMiddleware, async (req, res) => {
       const dealerHand = [deck.pop(), deck.pop()];
       const resultObj = { phase: 'playing', playerHand, dealerHand: [dealerHand[0], { hidden: true }], fullDealer: dealerHand, wager };
       const betInsert = await client.query('INSERT INTO bets (user_id, game, wager, payout, result) VALUES ($1,$2,$3,$4,$5) RETURNING id', [req.user.id, 'blackjack', wager, 0, JSON.stringify(resultObj)]);
+
+      // Natural blackjack detection (player and/or dealer) before returning to client
+      const playerValue = calculateHandValue(playerHand);
+      const dealerValueInitial = calculateHandValue(dealerHand);
+      const isPlayerNatural = playerHand.length === 2 && playerValue === 21;
+      const isDealerNatural = dealerHand.length === 2 && dealerValueInitial === 21;
+      if (isPlayerNatural || isDealerNatural) {
+        // Resolve immediately
+        let outcome = 'push';
+        let payout = 0;
+        if (isPlayerNatural && !isDealerNatural) {
+          outcome = 'blackjack';
+          payout = Number((wager * 2.5).toFixed(2)); // wager + 1.5*wager
+        } else if (!isPlayerNatural && isDealerNatural) {
+          outcome = 'lose';
+          payout = 0;
+        } else if (isPlayerNatural && isDealerNatural) {
+          outcome = 'push';
+          payout = wager; // return wager
+        }
+        if (payout > 0) {
+	await client.query('UPDATE users SET balance = balance + $2, peak_balance=GREATEST(peak_balance, balance + $2) WHERE id=$1', [req.user.id, payout]);
+        }
+        resultObj.phase = 'finished';
+        resultObj.outcome = outcome;
+        resultObj.dealerHandFinal = dealerHand;
+        await client.query('UPDATE bets SET payout=$2, result=$3 WHERE id=$1', [betInsert.rows[0].id, payout, JSON.stringify(resultObj)]);
+        const balRow = await client.query('SELECT balance FROM users WHERE id=$1', [req.user.id]);
+        await client.query('COMMIT');
+        return res.json({
+          ok: true,
+          betId: betInsert.rows[0].id,
+          playerHand,
+          dealerHand,
+          playerValue,
+          dealerValue: dealerValueInitial,
+          outcome,
+          naturalResolved: true,
+          payout: payout.toFixed(2),
+          newBalance: Number(balRow.rows[0].balance).toFixed(2)
+        });
+      }
       await client.query('COMMIT');
       res.json({ ok: true, betId: betInsert.rows[0].id, playerHand, dealerHand: [dealerHand[0], { value: '?', suit: '?' }], playerValue: calculateHandValue(playerHand), dealerValue: getCardValue(dealerHand[0]), newBalance: newBalance.toFixed(2) });
     } catch (e) { try { await client.query('ROLLBACK'); } catch {} res.status(500).json({ error: e.message }); }
@@ -613,11 +698,24 @@ app.post('/api/blackjack/stand', authMiddleware, async (req, res) => {
       const playerValue = calculateHandValue(r.playerHand);
       const dealerValue = calculateHandValue(dealerHand);
       let outcome;
+      // Natural blackjack detection (if not already resolved) - if player started with 21 in 2 cards
+      const isPlayerNatural = r.playerHand.length === 2 && playerValue === 21;
+      const isDealerNatural = dealerHand.length === 2 && dealerValue === 21;
+      if (isPlayerNatural || isDealerNatural) {
+        if (isPlayerNatural && !isDealerNatural) outcome = 'blackjack';
+        else if (!isPlayerNatural && isDealerNatural) outcome = 'lose';
+        else outcome = 'push';
+      } else {
+        if (dealerValue > 21 || playerValue > dealerValue) outcome = 'win';
+        else if (playerValue === dealerValue) outcome = 'push';
+        else outcome = 'lose';
+      }
       if (dealerValue > 21 || playerValue > dealerValue) outcome = 'win';
       else if (playerValue === dealerValue) outcome = 'push';
       else outcome = 'lose';
       let payout = 0;
-      if (outcome === 'win') payout = Number((Number(bet.wager) * 2).toFixed(2));
+      if (outcome === 'blackjack') payout = Number((Number(bet.wager) * 2.5).toFixed(2));
+      else if (outcome === 'win') payout = Number((Number(bet.wager) * 2).toFixed(2));
       else if (outcome === 'push') payout = Number(bet.wager);
       if (payout > 0) {
   await client.query('UPDATE users SET balance = balance + $2, peak_balance=GREATEST(peak_balance, balance + $2) WHERE id=$1', [req.user.id, payout]);

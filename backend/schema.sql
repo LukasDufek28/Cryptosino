@@ -61,3 +61,13 @@ DO $$ BEGIN
     ALTER TABLE users ADD COLUMN is_admin BOOLEAN NOT NULL DEFAULT FALSE;
   END IF;
 END $$;
+
+-- Post-creation safeguard for is_owner column (single true owner allowed by app logic)
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='users' AND column_name='is_owner'
+  ) THEN
+    ALTER TABLE users ADD COLUMN is_owner BOOLEAN NOT NULL DEFAULT FALSE;
+  END IF;
+END $$;

@@ -23,6 +23,35 @@ function BlackjackGame({ balance, setBalance, token }) {
   const [finished, setFinished] = useState(false);
   const [betId, setBetId] = useState(null);
 
+  const [resolving, setResolving] = useState(false);
+
+  // Hoist stand so startGame can call it (accept optional override bet id)
+  const stand = async (overrideId) => {
+    if (!token) { setMessage('Login for persistent blackjack.'); return; }
+    const idToUse = overrideId || betId;
+    if (!idToUse) { setMessage('Missing betId'); return; }
+    setResolving(true);
+    const res = await fetch(`${API_URL}/api/blackjack/stand`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({ betId: idToUse })
+    });
+    const data = await res.json();
+  if (!res.ok) { setMessage(data.error || 'Stand failed'); setResolving(false); return; }
+  setDealerHand(data.dealerHand);
+  let msg = '';
+  const payoutNum = data.payout ? Number(data.payout) : 0;
+  if (data.outcome === 'blackjack') msg = `Blackjack! Paid $${payoutNum.toFixed(2)} (3:2)`;
+  else if (data.outcome === 'win') msg = `You win! Payout $${payoutNum.toFixed(2)}`;
+  else if (data.outcome === 'push') msg = `Push. Returned $${payoutNum.toFixed(2)}`;
+  else msg = 'You lose.';
+    setMessage(msg);
+    if (data.newBalance) setBalance(Number(data.newBalance));
+    setGameState('finished');
+    setFinished(true);
+    setResolving(false);
+  };
+
   const startGame = async () => {
     const wager = Number(bet);
     if (!wager || wager <= 0 || wager > balance) {
@@ -37,10 +66,31 @@ function BlackjackGame({ balance, setBalance, token }) {
       });
       const data = await res.json();
       if (!res.ok) { setMessage(data.error || 'Deal failed'); return; }
+      // If backend already resolved a natural blackjack
+      if (data.naturalResolved) {
+        setPlayerHand(data.playerHand);
+        setDealerHand(data.dealerHand);
+        setBetId(data.betId);
+        setBalance(Number(data.newBalance));
+        const payoutNum = data.payout ? Number(data.payout) : 0;
+        if (data.outcome === 'blackjack') setMessage(`Blackjack! Paid $${payoutNum.toFixed(2)} (3:2)`);
+        else if (data.outcome === 'push') setMessage(`Both have blackjack! Push. Returned $${payoutNum.toFixed(2)}`);
+        else if (data.outcome === 'lose') setMessage('Dealer blackjack. You lose.');
+        setGameState('finished');
+        setFinished(true);
+        return;
+      }
       setPlayerHand(data.playerHand);
       setDealerHand(data.dealerHand);
       setBetId(data.betId);
       setBalance(Number(data.newBalance));
+      // Natural blackjack (fallback if backend ever changes behavior)
+      if (handValue(data.playerHand) === 21 && data.playerHand.length === 2) {
+        setMessage('Blackjack! Resolving...');
+        setResolving(true);
+        const natId = data.betId;
+        setTimeout(() => stand(natId), 300);
+      }
     } else {
       // Local fallback (non-persistent) simple random deal using existing public endpoint removal (simulate locally)
       const suits = ['♠','♥','♦','♣'];
@@ -53,15 +103,19 @@ function BlackjackGame({ balance, setBalance, token }) {
       setPlayerHand(player);
       setDealerHand([{...dealer[0]}, {...dealer[1]}]);
       setBalance(prev => Number((prev - wager).toFixed(2)));
+      if (handValue(player) === 21 && player.length === 2) {
+        setTimeout(() => {
+          // For local mode we don't have server stand; just show message & refund 3:2 manually
+          setMessage('Blackjack! (Demo)');
+          setBalance(prev => Number((prev + wager * 2.5).toFixed(2))); // add 2.5x since we subtracted wager earlier
+          setGameState('finished');
+          setFinished(true);
+        }, 400);
+      }
     }
     setMessage('');
     setGameState('playing');
     setFinished(false);
-
-    // Auto-stand if player has 21 after deal
-    if (handValue(playerHand) === 21) {
-      setTimeout(() => stand(), 500);
-    }
   };
 
   const hit = async () => {
@@ -94,25 +148,6 @@ function BlackjackGame({ balance, setBalance, token }) {
     }
   };
 
-  const stand = async () => {
-    if (!token) { setMessage('Login for persistent blackjack.'); return; }
-    const res = await fetch(`${API_URL}/api/blackjack/stand`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-      body: JSON.stringify({ betId })
-    });
-    const data = await res.json();
-    if (!res.ok) { setMessage(data.error || 'Stand failed'); return; }
-    setDealerHand(data.dealerHand);
-    let msg = '';
-    if (data.outcome === 'win') msg = 'You win!';
-    else if (data.outcome === 'push') msg = 'Push! Bet returned.';
-    else msg = 'You lose!';
-    setMessage(msg);
-    if (data.newBalance) setBalance(Number(data.newBalance));
-    setGameState('finished');
-    setFinished(true);
-  };
 
   const resetGame = () => {
     setPlayerHand([]);
@@ -186,11 +221,14 @@ function BlackjackGame({ balance, setBalance, token }) {
               </div>
             </div>
           </div>
-          {gameState === 'playing' && (
+          {gameState === 'playing' && !resolving && (
             <div style={{ display: 'flex', gap: 16, margin: '18px 0 0 0' }}>
-              <button className="blackjack-btn" onClick={hit}>Hit</button>
-              <button className="blackjack-btn" onClick={stand}>Stand</button>
+              <button className="blackjack-btn" onClick={hit} disabled={resolving}>Hit</button>
+              <button className="blackjack-btn" onClick={() => stand()} disabled={resolving}>Stand</button>
             </div>
+          )}
+          {gameState === 'playing' && resolving && (
+            <div style={{ marginTop: 18, fontSize: '0.9em', color: '#00e1ff' }}>Resolving...</div>
           )}
           {gameState === 'finished' && (
             <button className="blackjack-btn" style={{ marginTop: 18 }} onClick={resetGame}>Play Again</button>

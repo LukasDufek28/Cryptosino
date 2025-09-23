@@ -13,8 +13,11 @@ function DiceGame({ balance, setBalance, token }) {
 
   // Calculate potential payout based on bet and winChance
   const numericBet = Number(bet) || 0;
-  const payoutMultiplier = (99 / winChance) * 0.99;
-  const potentialPayout = (numericBet > 0 ? (numericBet * payoutMultiplier).toFixed(2) : '0.00');
+  // Stake-style: multiplier = 99 / chance; treat 0% as no possible win (multiplier 0)
+  const payoutMultiplier = winChance > 0 ? 99 / winChance : 0;
+  const potentialPayout = (numericBet > 0 && payoutMultiplier > 0)
+    ? (numericBet * payoutMultiplier).toFixed(2)
+    : '0.00';
 
   const handlePlay = useCallback(async () => {
     const wager = Number(bet);
@@ -39,8 +42,8 @@ function DiceGame({ balance, setBalance, token }) {
         setAutoRolling(false);
         return;
       }
-      setBalance(Number(data.newBalance));
-      setResult({ roll: data.roll, win: data.win, payout: data.payout, clientSeed: data.clientSeed, nonce: data.nonce });
+  setBalance(Number(data.newBalance));
+  setResult({ roll: data.roll, win: data.win, payout: data.payout, clientSeed: data.clientSeed, nonce: data.nonce, multiplier: data.multiplier });
       setClientSeed(data.clientSeed);
     } else {
       // Fallback local simulation (no persistence)
@@ -55,7 +58,7 @@ function DiceGame({ balance, setBalance, token }) {
   let newBalance = balance - wager;
   if (data.win) newBalance += wager * payoutMultiplier;
       setBalance(Number(newBalance.toFixed(2)));
-  setResult({ ...data, payout: data.win ? (wager * payoutMultiplier).toFixed(2) : 0 });
+  setResult({ ...data, payout: data.win ? (wager * payoutMultiplier).toFixed(2) : 0, multiplier: payoutMultiplier });
       setClientSeed(seed);
     }
   }, [API_URL, balance, bet, clientSeed, payoutMultiplier, setBalance, token, winChance]);
@@ -114,15 +117,16 @@ function DiceGame({ balance, setBalance, token }) {
           <input
             className="dice-slider"
             type="range"
-            min="2"
-            max="98"
+            min="0"
+            max="100"
             value={winChance}
             onChange={e => setWinChance(e.target.value)}
           />
         </label>
         <div style={{ margin: '10px 0 0 0' }}>
-          Potential Payout: <b>${potentialPayout}</b>
+          Multiplier: <b>{payoutMultiplier.toFixed(4)}x</b> | Potential Payout: <b>${potentialPayout}</b>
         </div>
+        <div style={{ fontSize: '0.7em', color: '#888', marginTop: 4 }}>House edge: 1.00%</div>
       </div>
   <button className="dice-btn" onClick={handlePlay} disabled={numericBet > balance || numericBet <= 0 || autoRolling}>Play</button>
       {result && (
@@ -135,7 +139,7 @@ function DiceGame({ balance, setBalance, token }) {
               {result.win ? 'You Win!' : 'You Lose!'}
             </b>
           </p>
-          <p>Payout: <b>${result.payout}</b></p>
+          <p>Payout: <b>${result.payout}</b> {result.multiplier && (<span style={{ color:'#888', fontSize:'0.8em' }}>({result.multiplier.toFixed(4)}x)</span>)}</p>
           <p>Client Seed: <span style={{ color: '#aaa' }}>{result.clientSeed}</span></p>
           <p>Nonce: <span style={{ color: '#aaa' }}>{result.nonce}</span></p>
         </div>
