@@ -63,6 +63,7 @@
 .leader-item .rank {width:20px;font-weight:600;color:#00e1ff;}
 .leader-item .lname {flex:1;color:#fff;}
 .leader-item .lbal {font-weight:600;color:#0f8;font-family:monospace;}
+.leader-item .lbal.neg {color:#ff4d4f;}
 .leader-item:nth-child(1) {background:linear-gradient(90deg,#2a2d35,#2d3d45);} 
 .leader-item:nth-child(1) .rank {color:#ffd700;}
 .leader-item:nth-child(2) .rank {color:#c0c0c0;}

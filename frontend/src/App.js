@@ -17,6 +17,8 @@ function MainPage({ balance, token, setBalance }) {
   const [loading, setLoading] = useState(false);
   const [leaders, setLeaders] = useState([]);
   const [loadingLeaders, setLoadingLeaders] = useState(false);
+  const [profitLeaders, setProfitLeaders] = useState([]);
+  const [loadingProfit, setLoadingProfit] = useState(false);
 
   useEffect(() => {
     async function loadLeaders() {
@@ -28,8 +30,18 @@ function MainPage({ balance, token, setBalance }) {
       } catch (e) { /* ignore */ }
       setLoadingLeaders(false);
     }
+    async function loadProfit() {
+      setLoadingProfit(true);
+      try {
+        const res = await fetch(`${API_URL}/api/leaderboard/net-profit`);
+        const data = await res.json();
+        if (res.ok && Array.isArray(data.leaders)) setProfitLeaders(data.leaders);
+      } catch (e) { /* ignore */ }
+      setLoadingProfit(false);
+    }
     loadLeaders();
-    const interval = setInterval(loadLeaders, 15000); // refresh every 15s
+    loadProfit();
+    const interval = setInterval(() => { loadLeaders(); loadProfit(); }, 15000); // refresh every 15s
     return () => clearInterval(interval);
   }, []);
 
@@ -122,6 +134,26 @@ function MainPage({ balance, token, setBalance }) {
               <span className="lbal">${Number(l.peak_balance).toFixed(2)}</span>
             </li>
           ))}
+        </ul>
+        <div className="leaderboard-title" style={{ marginTop: 28 }}>💰 Net Profit</div>
+        {loadingProfit && profitLeaders.length === 0 && (
+          <div className="leaderboard-empty">Loading...</div>
+        )}
+        {!loadingProfit && profitLeaders.length === 0 && (
+          <div className="leaderboard-empty">No data yet</div>
+        )}
+        <ul className="leaderboard-list">
+          {profitLeaders.map((l, idx) => {
+            const v = Number(l.net_profit);
+            const cls = 'lbal' + (v < 0 ? ' neg' : '');
+            return (
+              <li key={l.username} className="leader-item">
+                <span className="rank">{idx + 1}</span>
+                <span className="lname">{l.username}</span>
+                <span className={cls}>{v < 0 ? '-' : ''}${Math.abs(v).toFixed(2)}</span>
+              </li>
+            );
+          })}
         </ul>
       </div>
     </div>
