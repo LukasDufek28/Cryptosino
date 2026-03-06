@@ -80,83 +80,113 @@ function MainPage({ balance, token, setBalance }) {
   };
 
   return (
-    <div className="home-layout">
-      <div className="main-container">
-      <div className="main-title">Cryptosino</div>
-      <div className="main-balance">Balance: <b>${balance.toFixed(2)}</b></div>
-      <Link className="main-link" to="/dice">🎲 Dice Game</Link>
-      <Link className="main-link" to="/crash">🚀 Crash Game</Link>
-      <Link className="main-link" to="/blackjack">🃏 Blackjack Game</Link>
-      <button
-        className="main-activate-btn"
-        onClick={handleActivate}
-        disabled={loading}
-        style={{ margin: '32px 0 0 0' }}
-      >
-        {loading ? 'Waking up slave...' : 'Get back to work blud!'}
-      </button>
-      <div style={{ minHeight: 28, marginTop: 10 }}>
-        {pingTime !== null && (
-          <div style={{ color: '#00e1ff' }}>
-            Response in {pingTime} ms
-          </div>
-        )}
+    <>
+      <div className="casino-hero">
+        <h1 className="casino-hero-title">CRYPTOSINO</h1>
+        <p className="casino-hero-sub">Play. Win. Cash out.</p>
       </div>
-      <div style={{ minHeight: 28 }}>
-        {pingMsg && (
-          <div style={{ color: '#00ffb0', fontWeight: 'bold' }}>
-            {pingMsg}
-          </div>
-        )}
+
+      <div className="games-grid">
+        <Link className="game-card dice" to="/dice">
+          <span className="game-icon">🎲</span>
+          <div className="game-title">DICE</div>
+          <div className="game-desc">Roll the dice and beat the odds. Set your target, place your bet.</div>
+        </Link>
+        <Link className="game-card crash" to="/crash">
+          <span className="game-icon">🚀</span>
+          <div className="game-title">CRASH</div>
+          <div className="game-badge">HOT</div>
+          <div className="game-desc">Watch the multiplier climb — cash out before it crashes!</div>
+        </Link>
+        <Link className="game-card blackjack" to="/blackjack">
+          <span className="game-icon">🃏</span>
+          <div className="game-title">BLACKJACK</div>
+          <div className="game-desc">Hit, stand, or double down. Beat the dealer to 21.</div>
+        </Link>
       </div>
-      {balance < 1000 && (
-        <button
-          onClick={handleReset}
-          style={{ marginTop: 16, padding: '10px 16px', background: '#222', color: '#fff', border: '1px solid #444', borderRadius: 6, cursor: 'pointer' }}
-        >
-          Reset Balance to 1000
-        </button>
-      )}
-      </div>
-      <div className="leaderboard card-right">
-        <div className="leaderboard-title">🏆 Top Peak Balances</div>
-        {loadingLeaders && leaders.length === 0 && (
-          <div className="leaderboard-empty">Loading...</div>
-        )}
-        {!loadingLeaders && leaders.length === 0 && (
-          <div className="leaderboard-empty">No data yet</div>
-        )}
-        <ul className="leaderboard-list">
-          {leaders.map((l, idx) => (
-            <li key={l.username} className="leader-item">
-              <span className="rank">{idx + 1}</span>
-              <span className="lname">{l.username}</span>
-              <span className="lbal">${Number(l.peak_balance).toFixed(2)}</span>
-            </li>
-          ))}
-        </ul>
-        <div className="leaderboard-title" style={{ marginTop: 28 }}>💰 Net Profit</div>
-        {loadingProfit && profitLeaders.length === 0 && (
-          <div className="leaderboard-empty">Loading...</div>
-        )}
-        {!loadingProfit && profitLeaders.length === 0 && (
-          <div className="leaderboard-empty">No data yet</div>
-        )}
-        <ul className="leaderboard-list">
-          {profitLeaders.map((l, idx) => {
-            const v = Number(l.net_profit);
-            const cls = 'lbal' + (v < 0 ? ' neg' : '');
-            return (
+
+      <div className="home-layout">
+        <div className="main-container">
+          <div className="main-title">Your Balance</div>
+          <div className="main-balance">Available: <b>${balance.toFixed(2)}</b></div>
+          <button
+            className="main-activate-btn"
+            onClick={handleActivate}
+            disabled={loading}
+          >
+            {loading ? 'Waking up server…' : '⚡ Wake Server'}
+          </button>
+          {pingTime !== null && (
+            <div style={{ color: '#06d6a0', fontSize: '0.9em', marginTop: 8 }}>
+              ✓ Response in {pingTime} ms
+            </div>
+          )}
+          {pingMsg && (
+            <div style={{ color: '#a78bfa', fontSize: '0.88em', marginTop: 4 }}>
+              {pingMsg}
+            </div>
+          )}
+          {balance < 1000 && (
+            <button
+              onClick={handleReset}
+              style={{
+                marginTop: 20,
+                padding: '10px 20px',
+                background: 'rgba(239,68,68,0.1)',
+                color: '#fca5a5',
+                border: '1px solid rgba(239,68,68,0.25)',
+                borderRadius: 10,
+                cursor: 'pointer',
+                fontSize: '0.88em',
+                fontWeight: 600,
+                width: '100%',
+              }}
+            >
+              Reset Balance to $1,000
+            </button>
+          )}
+        </div>
+
+        <div className="leaderboard card-right">
+          <div className="leaderboard-title">🏆 Peak Balances</div>
+          {loadingLeaders && leaders.length === 0 && (
+            <div className="leaderboard-empty">Loading...</div>
+          )}
+          {!loadingLeaders && leaders.length === 0 && (
+            <div className="leaderboard-empty">No data yet</div>
+          )}
+          <ul className="leaderboard-list">
+            {leaders.map((l, idx) => (
               <li key={l.username} className="leader-item">
                 <span className="rank">{idx + 1}</span>
                 <span className="lname">{l.username}</span>
-                <span className={cls}>{v < 0 ? '-' : ''}${Math.abs(v).toFixed(2)}</span>
+                <span className="lbal">${Number(l.peak_balance).toFixed(2)}</span>
               </li>
-            );
-          })}
-        </ul>
+            ))}
+          </ul>
+          <div className="leaderboard-title" style={{ marginTop: 24 }}>💰 Net Profit</div>
+          {loadingProfit && profitLeaders.length === 0 && (
+            <div className="leaderboard-empty">Loading...</div>
+          )}
+          {!loadingProfit && profitLeaders.length === 0 && (
+            <div className="leaderboard-empty">No data yet</div>
+          )}
+          <ul className="leaderboard-list">
+            {profitLeaders.map((l, idx) => {
+              const v = Number(l.net_profit);
+              const cls = 'lbal' + (v < 0 ? ' neg' : '');
+              return (
+                <li key={l.username} className="leader-item">
+                  <span className="rank">{idx + 1}</span>
+                  <span className="lname">{l.username}</span>
+                  <span className={cls}>{v < 0 ? '-' : ''}${Math.abs(v).toFixed(2)}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
 

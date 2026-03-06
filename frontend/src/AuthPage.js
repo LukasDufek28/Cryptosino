@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import './AuthPage.css';
 
 const API_URL = process.env.REACT_APP_API_URL;
 
@@ -33,30 +34,62 @@ export default function AuthPage({ onAuth }) {
   }
 
   return (
-    <div style={{ maxWidth: 360, margin: '80px auto', padding: 24, background: '#111', border: '1px solid #333', borderRadius: 8, color: '#eee' }}>
-      <h2 style={{ textAlign: 'center', marginTop: 0 }}>Cryptosino</h2>
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        <button onClick={() => setMode('login')} disabled={mode==='login'}>Login</button>
-        <button onClick={() => setMode('register')} disabled={mode==='register'}>Register</button>
+    <div className="auth-page">
+      <div className="auth-card">
+        <div className="auth-logo">
+          <span className="auth-logo-text">CRYPTOSINO</span>
+          <span className="auth-logo-sub">Premium Crypto Casino</span>
+        </div>
+
+        <div className="auth-tabs">
+          <button
+            className={`auth-tab${mode === 'login' ? ' active' : ''}`}
+            onClick={() => setMode('login')}
+          >
+            Sign In
+          </button>
+          <button
+            className={`auth-tab${mode === 'register' ? ' active' : ''}`}
+            onClick={() => setMode('register')}
+          >
+            Register
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="auth-form">
+          <div className="auth-field">
+            <label>Username</label>
+            <input
+              placeholder="Enter your username"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              required
+              autoComplete="username"
+            />
+          </div>
+          <div className="auth-field">
+            <label>Password</label>
+            <input
+              placeholder="Enter your password"
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              required
+              minLength={6}
+              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+            />
+          </div>
+          {error && <div className="auth-error">{error}</div>}
+          <button type="submit" className="auth-submit" disabled={loading}>
+            {loading ? 'Please wait…' : (mode === 'login' ? 'Sign In' : 'Create Account')}
+          </button>
+        </form>
+
+        <div className="auth-footer">
+          By playing you confirm you are 18+ and agree to our terms.
+        </div>
       </div>
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <input
-          placeholder="Username"
-          value={username}
-          onChange={e => setUsername(e.target.value)}
-          required
-        />
-        <input
-          placeholder="Password"
-          type="password"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          required
-          minLength={6}
-        />
-        <button type="submit" disabled={loading}>{loading ? 'Please wait...' : (mode === 'login' ? 'Login' : 'Create Account')}</button>
-        {error && <div style={{ color: '#f66', fontSize: 14 }}>{error}</div>}
-      </form>
     </div>
   );
 }
+

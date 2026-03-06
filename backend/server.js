@@ -314,7 +314,7 @@ const DICE_HOUSE_EDGE = 0.01; // 1% house edge similar to Stake
 
 // Provably fair public dice roll endpoint (stateless)
 app.post('/api/roll', (req, res) => {
-  const { clientSeed, winChance, nonce } = req.body;
+  const { clientSeed, winChance, nonce, rollOver } = req.body;
   const chance = Number(winChance);
   if (isNaN(chance) || chance < 0 || chance > 100) {
     return res.status(400).json({ error: 'Invalid winChance' });
@@ -324,7 +324,9 @@ app.post('/api/roll', (req, res) => {
     .update(serverSeed + ':' + clientSeed + ':' + nonce)
     .digest('hex');
   const roll = parseInt(hash.slice(0, 8), 16) / 0xffffffff * 100;
-  const win = roll < chance;
+  // rollOver: win if roll is above the threshold (100 - chance)
+  // rollUnder: win if roll is below the threshold (chance)
+  const win = rollOver ? roll > (100 - chance) : roll < chance;
   const multiplier = chance > 0 ? (100 - (DICE_HOUSE_EDGE * 100)) / chance : 0;
   res.json({
     roll: roll.toFixed(2),
@@ -337,9 +339,9 @@ app.post('/api/roll', (req, res) => {
   });
 });
 
-// Persistent dice (requires auth) expects: { bet, winChance, clientSeed }
+// Persistent dice (requires auth) expects: { bet, winChance, clientSeed, rollOver }
 app.post('/api/dice/roll', authMiddleware, async (req, res) => {
-  const { bet, winChance, clientSeed } = req.body;
+  const { bet, winChance, clientSeed, rollOver } = req.body;
   const wager = Number(bet);
   const chance = Number(winChance);
   if (!wager || wager <= 0) return res.status(400).json({ error: 'Invalid bet' });
@@ -362,7 +364,7 @@ app.post('/api/dice/roll', authMiddleware, async (req, res) => {
         .update(serverSeed + ':' + seedToUse + ':' + nonce)
         .digest('hex');
       const rollVal = parseInt(hash.slice(0, 8), 16) / 0xffffffff * 100;
-      const win = rollVal < chance;
+      const win = rollOver ? rollVal > (100 - chance) : rollVal < chance;
       let payoutMultiplier = 0;
       if (chance > 0) {
         payoutMultiplier = (100 - (DICE_HOUSE_EDGE * 100)) / chance; // 99 / chance
