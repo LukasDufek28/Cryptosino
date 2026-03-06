@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import './AdminDashboard.css';
 
 const API_URL = process.env.REACT_APP_API_URL;
@@ -16,7 +16,7 @@ export default function AdminDashboard({ token, currentUserId }) {
   const [wipeConfirm, setWipeConfirm] = useState('');
   const [wipeBusy, setWipeBusy] = useState(false);
 
-  async function loadAll() {
+  const loadAll = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
@@ -34,20 +34,9 @@ export default function AdminDashboard({ token, currentUserId }) {
       setError(e.message);
     }
     setLoading(false);
-  }
+  }, [token]);
 
-  useEffect(() => { loadAll(); }, []);
-
-  const handlePromote = async (id) => {
-    setPromoteBusy(id);
-    try {
-      const res = await fetch(`${API_URL}/api/admin/users/${id}/promote`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Promote failed');
-      setUsers(u => u.map(x => x.id === id ? { ...x, is_admin: true } : x));
-    } catch (e) { alert(e.message); }
-    setPromoteBusy(null);
-  };
+  useEffect(() => { loadAll(); }, [loadAll]);
 
   const handleToggleAdmin = async (user) => {
     const id = user.id;

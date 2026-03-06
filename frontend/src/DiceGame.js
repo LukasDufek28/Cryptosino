@@ -213,7 +213,7 @@ function DiceGame({ balance, setBalance, token }) {
       setClientSeed(seed);
     }
     setRolling(false);
-  }, [balance, bet, clientSeed, payoutMultiplier, rollOver, setBalance, threshold, token, winProb]);
+  }, [balance, bet, clientSeed, payoutMultiplier, rollOver, setBalance, token, winProb]);
 
   useEffect(() => {
     if (autoRolling) {
