@@ -16,6 +16,7 @@ export default function NavBar({ user, balance, onLogout }) {
         <Link to="/dice" className="nav-link">Dice</Link>
         <Link to="/crash" className="nav-link">Crash</Link>
         <Link to="/blackjack" className="nav-link">Blackjack</Link>
+        <Link to="/slots" className="nav-link">Slots</Link>
   {user?.is_admin && <Link to="/admin" className="nav-link">Admin</Link>}
       </div>
       <div className="nav-right">
