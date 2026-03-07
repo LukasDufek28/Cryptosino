@@ -77,6 +77,9 @@
 .game-card.blackjack { background: linear-gradient(160deg, #111827 0%, #0d1f14 100%); }
 .game-card.blackjack:hover { box-shadow: 0 16px 48px rgba(16,185,129,0.3); border-color: rgba(16,185,129,0.4); }
 
+.game-card.slots { background: linear-gradient(160deg, #111827 0%, #1f0d2b 100%); }
+.game-card.slots:hover { box-shadow: 0 16px 48px rgba(167,139,250,0.35); border-color: rgba(167,139,250,0.4); }
+
 .game-icon {
   font-size: 3.6rem;
   margin-bottom: 18px;
@@ -94,9 +97,10 @@
   margin-bottom: 8px;
 }
 
-.game-card.dice   .game-title { color: #a78bfa; }
-.game-card.crash  .game-title { color: #f0b429; }
+.game-card.dice      .game-title { color: #a78bfa; }
+.game-card.crash     .game-title { color: #f0b429; }
 .game-card.blackjack .game-title { color: #10b981; }
+.game-card.slots     .game-title { color: #c4b5fd; }
 
 .game-desc {
   color: #64748b;

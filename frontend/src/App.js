@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import DiceGame from './DiceGame';
 import CrashGame from './CrashGame';
 import BlackjackGame from './BlackjackGame';
+import SlotsGame from './SlotsGame';
 import AdminDashboard from './AdminDashboard';
 import AuthPage from './AuthPage';
 import NavBar from './NavBar';
@@ -102,6 +103,12 @@ function MainPage({ balance, token, setBalance }) {
           <span className="game-icon">🃏</span>
           <div className="game-title">BLACKJACK</div>
           <div className="game-desc">Hit, stand, or double down. Beat the dealer to 21.</div>
+        </Link>
+        <Link className="game-card slots" to="/slots">
+          <span className="game-icon">🎰</span>
+          <div className="game-title">SLOTS</div>
+          <div className="game-badge">NEW</div>
+          <div className="game-desc">Respin Joker & Golden Book — spin the reels and hit the jackpot!</div>
         </Link>
       </div>
 
@@ -247,6 +254,7 @@ function App() {
         <Route path="/dice" element={<DiceGame balance={balance} setBalance={setBalance} token={token} />} />
         <Route path="/crash" element={<CrashGame balance={balance} setBalance={setBalance} token={token} />} />
         <Route path="/blackjack" element={<BlackjackGame balance={balance} setBalance={setBalance} token={token} />} />
+        <Route path="/slots" element={<SlotsGame balance={balance} setBalance={setBalance} token={token} />} />
         {user?.is_admin && (
           <Route path="/admin" element={<AdminDashboard token={token} currentUserId={user.id} />} />
         )}
