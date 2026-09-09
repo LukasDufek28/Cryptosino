@@ -8,6 +8,7 @@ backend/.env
 frontend/node_modules/
 frontend/.env
 frontend/build/
+/build/
 
 # OS/Editor files
 .DS_Store
