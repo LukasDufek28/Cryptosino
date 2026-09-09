@@ -177,7 +177,7 @@ app.get('/api/admin/stats', authMiddleware, adminOnly, async (req, res) => {
 app.get('/api/admin/users', authMiddleware, adminOnly, async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 200, 500);
   try {
-    const { rows } = await query(`SELECT u.id, u.username, u.balance, u.peak_balance, u.is_admin, u.created_at,
+    const { rows } = await query(`SELECT u.id, u.username, u.balance, u.peak_balance, u.is_admin, COALESCE(u.is_owner, FALSE) AS is_owner, u.created_at,
         COALESCE(SUM(b.wager),0) AS total_wagered,
         COALESCE(SUM(b.payout),0) AS total_payout,
         COALESCE(SUM(b.payout),0) - COALESCE(SUM(b.wager),0) AS net_profit
@@ -203,17 +203,16 @@ app.post('/api/admin/users/:id/promote', authMiddleware, adminOnly, async (req, 
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// Demote user from admin (cannot demote last remaining admin)
-app.post('/api/admin/users/:id/unpromote', authMiddleware, adminOnly, async (req, res) => {
+// Demote an admin. Owners must transfer ownership before their role can change.
+async function demoteAdmin(req, res) {
   const id = Number(req.params.id);
   if (!id) return res.status(400).json({ error: 'Invalid id' });
-  if (id === req.user.id) return res.status(400).json({ error: 'You cannot unpromote yourself' });
+  if (id === req.user.id) return res.status(400).json({ error: 'You cannot demote yourself' });
   try {
-    // Check if target exists and is currently admin
-    const target = await query('SELECT id, username, is_admin FROM users WHERE id=$1', [id]);
+    const target = await query('SELECT id, username, is_admin, COALESCE(is_owner, FALSE) AS is_owner FROM users WHERE id=$1', [id]);
     if (!target.rows.length) return res.status(404).json({ error: 'User not found' });
+    if (target.rows[0].is_owner) return res.status(400).json({ error: 'Owners cannot be demoted. Transfer ownership first.' });
     if (!target.rows[0].is_admin) return res.status(400).json({ error: 'User is not an admin' });
-    // Count current admins
     const adminCount = await query('SELECT COUNT(*)::int AS c FROM users WHERE is_admin=TRUE');
     if (adminCount.rows[0].c <= 1) {
       return res.status(400).json({ error: 'Cannot demote the last remaining admin' });
@@ -223,7 +222,11 @@ app.post('/api/admin/users/:id/unpromote', authMiddleware, adminOnly, async (req
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
-});
+}
+
+app.post('/api/admin/users/:id/demote', authMiddleware, adminOnly, demoteAdmin);
+// Retained for clients that have not yet received the renamed frontend.
+app.post('/api/admin/users/:id/unpromote', authMiddleware, adminOnly, demoteAdmin);
 
 // Delete user (cannot delete last remaining admin, and optionally could block self-delete)
 app.delete('/api/admin/users/:id', authMiddleware, adminOnly, async (req, res) => {

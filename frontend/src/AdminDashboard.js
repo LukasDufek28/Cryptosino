@@ -8,7 +8,7 @@ export default function AdminDashboard({ token, currentUserId }) {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [promoteBusy, setPromoteBusy] = useState(null); // track id for promote/demote toggle
+  const [roleBusy, setRoleBusy] = useState(null);
   const [deleteBusy, setDeleteBusy] = useState(null);
   const [balanceBusy, setBalanceBusy] = useState(null);
   const [balanceEdit, setBalanceEdit] = useState({});
@@ -44,15 +44,15 @@ export default function AdminDashboard({ token, currentUserId }) {
     if (!makingAdmin) {
       if (!window.confirm('Remove admin privileges from this user?')) return;
     }
-    setPromoteBusy(id);
+    setRoleBusy(id);
     try {
-      const endpoint = makingAdmin ? 'promote' : 'unpromote';
+      const endpoint = makingAdmin ? 'promote' : 'demote';
       const res = await fetch(`${API_URL}/api/admin/users/${id}/${endpoint}`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Action failed');
       setUsers(u => u.map(x => x.id === id ? { ...x, is_admin: makingAdmin } : x));
     } catch (e) { alert(e.message); }
-    setPromoteBusy(null);
+    setRoleBusy(null);
   };
 
   const handleDeleteUser = async (user) => {
@@ -198,7 +198,7 @@ export default function AdminDashboard({ token, currentUserId }) {
               <th>Net Profit</th>
               <th>Admin</th>
               <th>Adjust</th>
-              <th>Admin Action</th>
+              <th>Role Action</th>
               <th>Delete</th>
             </tr>
           </thead>
@@ -229,11 +229,13 @@ export default function AdminDashboard({ token, currentUserId }) {
                   </div>
                 </td>
                 <td>
-                  {u.id === currentUserId ? (
+                  {u.is_owner ? (
+                    <button disabled title="Owners must transfer ownership before their role can change">Owner</button>
+                  ) : u.id === currentUserId ? (
                     <button disabled title="Cannot change your own admin status">Self</button>
                   ) : (
-                    <button disabled={promoteBusy===u.id} onClick={()=>handleToggleAdmin(u)}>
-                      {u.is_admin ? 'Unpromote' : 'Promote'}
+                    <button disabled={roleBusy===u.id} onClick={()=>handleToggleAdmin(u)}>
+                      {u.is_admin ? 'Demote' : 'Promote'}
                     </button>
                   )}
                 </td>
