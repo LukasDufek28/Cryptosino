@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import './DiceGame.css';
 
-const API_URL = process.env.REACT_APP_API_URL;
+const API_URL = process.env.REACT_APP_API_URL || '';
 
 // --- Stake-style Dice Track (result + animated needle + draggable threshold) ---
 // threshold: the cutoff position on the 0-100 scale (preserved when toggling Under/Over)

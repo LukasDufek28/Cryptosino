@@ -10,7 +10,7 @@ import NavBar from './NavBar';
 import './NavBar.css';
 import './MainPage.css';
 
-const API_URL = process.env.REACT_APP_API_URL;
+const API_URL = process.env.REACT_APP_API_URL || '';
 
 function MainPage({ balance, token, setBalance }) {
   const [pingTime, setPingTime] = useState(null);

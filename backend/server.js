@@ -979,7 +979,12 @@ app.post('/api/slots/spin', authMiddleware, async (req, res) => {
   }
 });
 
-// Start the server
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+// Start a local server only when this file is executed directly. Vercel imports
+// the app from api/[...path].js and supplies the HTTP server itself.
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
+  });
+}
+
+module.exports = app;

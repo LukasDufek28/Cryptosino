@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import './AdminDashboard.css';
 
-const API_URL = process.env.REACT_APP_API_URL;
+const API_URL = process.env.REACT_APP_API_URL || '';
 
 export default function AdminDashboard({ token, currentUserId }) {
   const [stats, setStats] = useState(null);

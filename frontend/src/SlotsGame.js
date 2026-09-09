@@ -3,7 +3,7 @@ import React, {
 } from 'react';
 import './SlotsGame.css';
 
-const API_URL = process.env.REACT_APP_API_URL;
+const API_URL = process.env.REACT_APP_API_URL || '';
 
 // ─── Symbol definitions (icon + colour) ─────────────────────────────────────
 const SYMBOL_DEFS = {

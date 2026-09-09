@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import './CrashGame.css';
 
-const API_URL = process.env.REACT_APP_API_URL;
+const API_URL = process.env.REACT_APP_API_URL || '';
 
 // ── Crash Graph ───────────────────────────────────────────────
 function CrashGraph({ history, gameState, crashAt }) {
