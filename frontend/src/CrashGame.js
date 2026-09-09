@@ -205,6 +205,8 @@ function CrashGame({ balance, setBalance, token }) {
       if (next >= (crashPoint < 1.01 ? 1.01 : crashPoint)) {
         clearInterval(intervalRef.current);
         setGameState('crashed');
+        // Keep the predetermined result private until the animation reaches it.
+        setFinalRevealed(true);
       }
     }, 50);
   };
@@ -364,7 +366,7 @@ function CrashGame({ balance, setBalance, token }) {
       {message && <div className="crash-message">{message}</div>}
 
       {/* Provable Fairness */}
-      {crashAt && (
+      {finalRevealed && crashAt && (
         <div className="crash-fairness">
           <span>Nonce: <b>{nonce}</b></span>
           <span>Crash: <b>{crashAt?.toFixed(4)}x</b></span>
