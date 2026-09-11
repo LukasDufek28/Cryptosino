@@ -1,6 +1,6 @@
 # Cryptosino Frontend
 
-React UI for the Cryptosino games (Dice, Crash, Blackjack). Bootstrapped with Create React App.
+React UI for Cryptosino, with the Three.js Amber House casino at `/` and the original games in overlays or the classic lobby at `/lobby`. See [CASINO-3D.md](../CASINO-3D.md) for controls and room architecture.
 
 ## Prerequisites
 - Node.js 18+ (match backend)
@@ -10,18 +10,19 @@ React UI for the Cryptosino games (Dice, Crash, Blackjack). Bootstrapped with Cr
 ```
 REACT_APP_API_URL=http://localhost:5000
 ```
-Only vars prefixed with `REACT_APP_` are exposed to the client bundle. If missing, `src/config.js` falls back to `http://localhost:5000`.
+Leave REACT_APP_API_URL unset for the unified deployment. Requests default to same-origin `/api` routes. The local React development server proxies these to port 5000. Do not put backend secrets in frontend variables.
 
 ## Install
 ```
+cd ..
 npm install
 ```
 
 ## Run (Development)
 ```
-npm start
+npm run dev
 ```
-Launches on http://localhost:3000
+Run from the repository root. Starts the frontend on http://localhost:3000 and the backend on port 5000. Open the browser yourself.
 
 ## Build (Production)
 ```
@@ -30,14 +31,14 @@ npm run build
 Creates optimized static files in `build/`.
 
 ## Key Files
-- `src/config.js` central API base.
-- `DiceGame.js`, `CrashGame.js`, `BlackjackGame.js` call backend endpoints.
+- `src/casino/` contains the world, generated models, movement, HUD and presence client.
+- `DiceGame.js`, `CrashGame.js`, `BlackjackGame.js`, `SlotsGame.js` call backend endpoints.
 
 ## Typical Workflow
-1. Start backend (default port 5000).
-2. Ensure `.env` has correct `REACT_APP_API_URL` before building.
-3. Run `npm start` here.
-4. Use browser DevTools Network tab to debug API calls if failures.
+1. Put database settings in `backend/.env` when you need authenticated games.
+2. Start both processes with `npm run dev` from the repository root.
+3. Open http://localhost:3000 and explore without signing in, or sign in to play.
+4. Shared player presence uses an optional additive migration described in CASINO-3D.md.
 
 ## Testing
 ```

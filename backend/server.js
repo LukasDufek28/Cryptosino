@@ -224,6 +224,8 @@ async function demoteAdmin(req, res) {
   }
 }
 
+app.use('/api/casino', require('./casino/router')(authMiddleware));
+
 app.post('/api/admin/users/:id/demote', authMiddleware, adminOnly, demoteAdmin);
 // Retained for clients that have not yet received the renamed frontend.
 app.post('/api/admin/users/:id/unpromote', authMiddleware, adminOnly, demoteAdmin);

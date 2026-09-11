@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
+import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
 import DiceGame from './DiceGame';
 import CrashGame from './CrashGame';
 import BlackjackGame from './BlackjackGame';
@@ -11,6 +11,8 @@ import './NavBar.css';
 import './MainPage.css';
 
 const API_URL = process.env.REACT_APP_API_URL || '';
+const CasinoWorld = lazy(() => import('./casino/CasinoWorld'));
+const worldLoading = <div style={{ padding: 40, background: '#293e32', color: '#f1d5a0', minHeight: '100vh' }}>Opening The Amber House…</div>;
 
 function MainPage({ balance, token, setBalance }) {
   const [pingTime, setPingTime] = useState(null);
@@ -231,13 +233,6 @@ function App() {
     setBalance(Number(userData.balance));
   };
 
-  if (!token || !user) {
-    if (loadingUser) {
-      return <div style={{ color: '#fff', padding: 40 }}>Loading...</div>;
-    }
-    return <AuthPage onAuth={handleAuth} />;
-  }
-
   const handleLogout = () => {
     localStorage.removeItem('token');
     setToken(null);
@@ -248,9 +243,15 @@ function App() {
 
   return (
     <Router>
+      <Suspense fallback={worldLoading}>
+      <Routes>
+      <Route path="/" element={<CasinoWorld token={user ? token : null} user={user} balance={balance} setBalance={setBalance} onAuth={handleAuth} onLogout={handleLogout} />} />
+      <Route path="/casino" element={<Navigate to="/" replace />} />
+      <Route path="/signin" element={user ? <Navigate to="/" replace /> : <AuthPage onAuth={handleAuth} />} />
+      <Route path="*" element={!user || !token ? (loadingUser ? worldLoading : <AuthPage onAuth={handleAuth} />) : <>
       <NavBar user={user} balance={balance} onLogout={handleLogout} />
       <Routes>
-        <Route path="/" element={<MainPage balance={balance} token={token} setBalance={setBalance} />} />
+        <Route path="/lobby" element={<MainPage balance={balance} token={token} setBalance={setBalance} />} />
         <Route path="/dice" element={<DiceGame balance={balance} setBalance={setBalance} token={token} />} />
         <Route path="/crash" element={<CrashGame balance={balance} setBalance={setBalance} token={token} />} />
         <Route path="/blackjack" element={<BlackjackGame balance={balance} setBalance={setBalance} token={token} />} />
@@ -259,6 +260,9 @@ function App() {
           <Route path="/admin" element={<AdminDashboard token={token} currentUserId={user.id} />} />
         )}
       </Routes>
+      </>} />
+      </Routes>
+      </Suspense>
     </Router>
   );
 }

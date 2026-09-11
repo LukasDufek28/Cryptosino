@@ -10,6 +10,7 @@
     "start": "node server.js",
     "dev": "node server.js",
     "migrate": "node migrate.js",
+    "migrate:casino": "node casino/migrate.js",
     "inspect:db": "node inspect-db.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

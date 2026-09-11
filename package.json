@@ -6,6 +6,9 @@
     "backend"
   ],
   "scripts": {
+    "dev": "node scripts/dev.js",
+    "dev:frontend": "npm start --workspace=frontend",
+    "dev:backend": "npm start --workspace=backend",
     "build": "npm run build --workspace=frontend && node scripts/prepare-vercel-output.js",
     "start": "node backend/server.js"
   }

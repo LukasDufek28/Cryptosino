@@ -12,7 +12,8 @@ export default function NavBar({ user, balance, onLogout }) {
     <div className="nav-bar">
       <div className="nav-left">
         <span className="nav-logo">Cryptosino</span>
-        <Link to="/" className="nav-link">Home</Link>
+        <Link to="/" className="nav-link">3D Casino</Link>
+        <Link to="/lobby" className="nav-link">Classic lobby</Link>
         <Link to="/dice" className="nav-link">Dice</Link>
         <Link to="/crash" className="nav-link">Crash</Link>
         <Link to="/blackjack" className="nav-link">Blackjack</Link>

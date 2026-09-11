@@ -1,4 +1,9 @@
 # Node.js
+node_modules/
+.env*
+!.env.example
+.vercel/
+.local-dependencies/
 /backend/node_modules/
 backend/node_modules/
 backend/.env

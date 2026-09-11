@@ -148,6 +148,17 @@ function CrashGame({ balance, setBalance, token }) {
   const [betId, setBetId] = useState(null);
   const intervalRef = useRef(null);
   const startTimeRef = useRef(null);
+  const revealTimeoutRef = useRef(null);
+  const mountedRef = useRef(true);
+
+  React.useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      clearInterval(intervalRef.current);
+      clearTimeout(revealTimeoutRef.current);
+    };
+  }, []);
 
   const adjBet = (fn) => setBet(v => String(fn(Number(v) || 0)));
 
@@ -187,6 +198,7 @@ function CrashGame({ balance, setBalance, token }) {
       } catch { setMessage('Network error'); return; }
     }
 
+    if (!mountedRef.current) return;
     setNonce(newNonce);
     setCrashAt(crashPoint < 1.01 ? 1.01 : crashPoint);
     setMultiplier(1.00);
@@ -236,7 +248,8 @@ function CrashGame({ balance, setBalance, token }) {
       const payout = (Number(bet) * multiplier).toFixed(2);
       setBalance(prev => Number((prev + Number(payout)).toFixed(2)));
     }
-    setTimeout(() => {
+    if (!mountedRef.current) return;
+    revealTimeoutRef.current = setTimeout(() => {
       setFinalRevealed(true);
       const cp = crashAt;
       if (cp > multiplier) setMessage(`✅ Cashed at ${multiplier.toFixed(2)}x | Crashed at ${cp.toFixed(2)}x — Good call!`);

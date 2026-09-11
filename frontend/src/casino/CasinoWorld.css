@@ -1,0 +1,102 @@
+.amber-world { position: fixed; inset: 0; isolation: isolate; overflow: hidden; background: #dfc8a9; color: #f2e7d1; font-family: 'Inter', sans-serif; }
+.amber-canvas, .amber-vignette { position: absolute; inset: 0; }
+.amber-canvas canvas { display: block; width: 100%; height: 100%; outline: none; touch-action: none; }
+.amber-vignette { pointer-events: none; background: linear-gradient(180deg, rgba(34,32,23,.58), transparent 24%, transparent 70%, rgba(31,33,25,.5)), linear-gradient(90deg, rgba(28,35,28,.18), transparent 60%); }
+.amber-world button { font: inherit; cursor: pointer; }
+.amber-world button:focus-visible, .amber-world a:focus-visible { outline: 2px solid #ffe1a0; outline-offset: 5px; }
+.amber-world button:disabled { opacity: .5; cursor: wait; }
+.amber-topbar { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 27px 40px; }
+.amber-brand { display: flex; gap: 15px; align-items: center; }
+.amber-brand-mark { width: 44px; height: 47px; border: 1px solid #dbbd89; border-radius: 22px 22px 3px 3px; display: grid; place-content: center; color: #efd4a0; font: 27px Georgia, serif; position: relative; }
+.amber-brand-mark span { position: absolute; font-size: 15px; bottom: 3px; right: 5px; }
+.amber-brand strong { display: block; font-size: 12px; letter-spacing: .19em; font-weight: 600; }
+.amber-brand small { display: block; font-size: 8px; margin-top: 8px; letter-spacing: .26em; opacity: .65; }
+.amber-topbar nav { display: flex; align-items: center; gap: 24px; }
+.amber-nav-button, .amber-icon-button, .amber-reset { border: 0; background: transparent; color: #f3e7cf; font-size: 11px !important; padding: 9px 0; }
+.amber-nav-button span { padding-left: 15px; }
+.amber-icon-button { font-size: 22px !important; }
+.amber-pill { border: 1px solid rgba(225,202,160,.48); color: #f8e8c9; background: #34483d; border-radius: 30px; padding: 12px 23px; font-size: 11px !important; }
+.amber-pill span { margin-left: 22px; }
+.amber-wallet { font-size: 12px; font-variant-numeric: tabular-nums; padding: 12px 17px; border-radius: 30px; background: rgba(34,49,38,.62); border: 1px solid #dac49644; }
+.amber-location { position: absolute; top: 113px; left: 42px; display: flex; gap: 10px; align-items: center; font-size: 9px; letter-spacing: .06em; }
+.amber-live-dot { width: 5px; height: 5px; border-radius: 50%; background: #c8d2a1; box-shadow: 0 0 10px #d5deba66; }
+.amber-location-divider { opacity: .4; padding: 0 4px; }
+.amber-welcome { position: absolute; isolation: isolate; left: 6.5%; top: 29%; width: min(610px, 65%); text-shadow: 0 2px 24px rgba(22,28,21,.38); }
+.amber-welcome::before { content: ''; position: absolute; inset: -90px -35px -45px -70px; z-index: -1; background: radial-gradient(ellipse, rgba(32,42,31,.76), transparent 72%); pointer-events: none; }
+.amber-eyebrow { font-size: 9px; letter-spacing: .2em; color: #e5c892; }
+.amber-eyebrow > span { display: inline-block; width: 23px; height: 1px; background: #d9b875; vertical-align: middle; margin-right: 10px; }
+.amber-welcome h1 { font: normal clamp(38px, 5.2vw, 78px)/1.08 Georgia, 'Times New Roman', serif; color: #fff1d6; letter-spacing: -.05em; margin: 24px 0 23px; }
+.amber-welcome p { font-size: 12px; line-height: 1.95; color: #f0e4cd; margin: 0 0 28px; }
+.amber-enter { border: 1px solid #f2d5a2; border-radius: 3px; background: #ebcca0; color: #394333; padding: 17px 22px; font-size: 11px !important; box-shadow: 0 4px 20px #211d1826; }
+.amber-enter:hover { background: #f3dab7; }
+.amber-enter span { margin-left: 44px; font-size: 17px; }
+.amber-welcome-foot { margin-top: 37px; display: flex; gap: 13px; align-items: center; font-size: 8px; letter-spacing: .13em; color: #ebdcc0; }
+.amber-welcome-foot i { width: 2px; height: 2px; border-radius: 50%; background: #d4b685; }
+.amber-bottom { position: absolute; bottom: 25px; left: 40px; right: 40px; display: flex; align-items: center; gap: 25px; }
+.amber-instructions { display: flex; gap: 17px; font-size: 9px; color: #e5decb; }
+.amber-instructions > span { display: flex; align-items: center; gap: 6px; }
+.amber-world kbd { border: 1px solid #ead7ad55; color: #f4e1ba; border-radius: 4px; padding: 5px 7px; font: 8px 'Inter', sans-serif; background: #3b493833; }
+.amber-reset { margin-left: 12px; opacity: .8; }
+.amber-map { position: absolute; bottom: 83px; right: 36px; width: 174px; border: 1px solid #e7d3a63b; background: #293b32cf; border-radius: 9px; padding: 14px 16px 11px; backdrop-filter: blur(14px); }
+.amber-map-title { display: flex; align-items: center; justify-content: space-between; font-size: 7px; letter-spacing: .13em; color: #e9d4a8; }
+.amber-map-title > span:last-child { font: 19px Georgia, serif; }
+.amber-map svg { width: 100%; display: block; margin-top: 4px; }
+.amber-map-foot { font-size: 7px; color: #c5cbb9; text-align: center; }
+.amber-reticle { position: absolute; pointer-events: none; left: 50%; top: 50%; transform: translate(-50%, -50%); font: 28px Georgia; color: #fff0d2; text-shadow: 0 1px 3px #2c3a2e; }
+.amber-floor-label { position: absolute; top: 165px; left: 41px; display: flex; align-items: center; gap: 13px; }
+.amber-floor-label > span { color: #ebc58c; font: 40px Georgia, serif; }
+.amber-floor-label small { display: block; font-size: 7px; letter-spacing: .17em; opacity: .7; margin-bottom: 5px; }
+.amber-floor-label strong { font-weight: 400; font-size: 11px; }
+.amber-interact { position: absolute; left: 50%; bottom: 110px; transform: translateX(-50%); display: flex; align-items: center; gap: 16px; border: 1px solid #dec79777; border-radius: 7px; color: #f4e4c9; background: #2b4037e8; backdrop-filter: blur(12px); padding: 11px 18px; font-size: 12px !important; white-space: nowrap; }
+.amber-interact kbd { font-size: 11px; }
+.amber-interact > span { color: #ebc58c; }
+.amber-seated { position: absolute; bottom: 173px; left: 50%; transform: translateX(-50%); font: italic 19px Georgia, serif; color: #f8e6bf; white-space: nowrap; text-shadow: 0 2px 6px #444b38; }
+.amber-resume { position: absolute; bottom: 75px; left: 50%; transform: translateX(-50%); border: 0; background: #26372eaa; color: #f4e3c3; border-radius: 20px; padding: 8px 16px; font-size: 9px !important; }
+.amber-presence-note { position: absolute; bottom: 62px; left: 40px; font-size: 9px; color: #eadabe; }
+.amber-modal-shade { position: absolute; inset: 0; z-index: 10; background: #15281fc4; backdrop-filter: blur(12px); display: grid; place-items: center; padding: 28px; }
+.amber-modal { max-height: calc(100dvh - 56px); width: min(580px, 100%); overflow: auto; background: #233d33; border: 1px solid #c3a67666; border-radius: 15px; box-shadow: 0 30px 100px #0005; outline: none; }
+.amber-modal-large { width: min(1080px, 100%); }
+.amber-modal > header { position: sticky; top: 0; z-index: 5; background: #233d33; display: flex; align-items: center; justify-content: space-between; padding: 24px 28px; border-bottom: 1px solid #e1c58f22; }
+.amber-modal h2 { color: #f0dab4; font: 29px Georgia, serif; margin: 7px 0 0; }
+.amber-close { border: 1px solid #d3c09555; border-radius: 50%; width: 35px; height: 35px; background: transparent; color: #eee0c5; font-size: 25px !important; }
+.amber-modal-content { padding: 24px 28px; }
+.amber-modal-intro { color: #c4ceba; font-size: 12px; line-height: 1.8; margin: 0 0 25px; }
+.amber-directory { display: grid; gap: 10px; }
+.amber-directory > button { display: flex; align-items: center; text-align: left; gap: 19px; background: #2e4a3e; border: 1px solid #e0bd7d33; color: #f4e5c9; border-radius: 8px; padding: 19px; }
+.amber-directory > button:hover { background: #395546; }
+.amber-directory strong { display: block; font: 21px Georgia, serif; }
+.amber-directory small { display: block; margin-top: 8px; font-size: 10px; color: #c5cbb8; }
+.amber-directory > button > span:last-child { margin-left: auto; color: var(--station-color); }
+.amber-game-number { font: 23px Georgia, serif; color: var(--station-color); }
+.amber-caption { font-size: 10px; color: #c7cab9; line-height: 1.8; margin: 25px 0 0; }
+.amber-account { display: flex; flex-direction: column; gap: 15px; padding: 15px 0; }
+.amber-account p { margin: 0; color: #c5cdbd; font-size: 11px; }
+.amber-account h3 { margin: 0 0 15px; color: #ebce94; font: 44px Georgia, serif; }
+.amber-account a { color: #e0c48d; padding: 12px 0; font-size: 12px; }
+.amber-modal .auth-page { min-height: 0; padding: 0; background: none; }
+.amber-modal .auth-card { border: 0; background: transparent; box-shadow: none; width: 100%; padding: 5px; }
+.amber-modal .auth-logo { display: none; }
+.amber-modal-large .amber-modal-content { background: #10191b; padding: 12px; }
+.amber-error { position: absolute; z-index: 12; top: 35%; left: 50%; transform: translateX(-50%); width: min(460px, 90%); background: #2a4036; border-radius: 12px; padding: 30px; border: 1px solid #c6aa73; }
+.amber-error h2 { font: 30px Georgia, serif; }
+.amber-error p { font-size: 13px; line-height: 1.7; }
+.amber-error a { color: #e5c795; font-size: 12px; }
+.amber-mobile-controls { display: none; }
+@media (max-width: 800px) {
+  .amber-topbar { padding: 20px; }.amber-topbar nav { gap: 13px; }.amber-brand strong { font-size: 9px; }.amber-brand small { font-size: 6px; }.amber-brand-mark { width: 35px; height: 40px; }.amber-brand { gap: 9px; }
+  .amber-nav-button { font-size: 10px !important; }.amber-nav-button span { display: none; }.amber-wallet { display: none; }.amber-pill { padding: 10px 16px; }
+  .amber-location { left: 21px; top: 93px; font-size: 8px; }.amber-welcome { left: 7%; top: 29%; width: 80%; }.amber-welcome h1 { font-size: clamp(40px, 7vw, 65px); }.amber-map { right: 20px; width: 130px; bottom: 80px; }
+  .amber-bottom { left: 20px; bottom: 20px; right: 20px; }.amber-instructions { gap: 9px; }.amber-instructions > span:last-child { display: none; }.amber-floor-label { left: 22px; top: 145px; }
+  .amber-modal-shade { padding: 12px; }.amber-modal { max-height: calc(100dvh - 24px); }.amber-modal > header { padding: 19px; }.amber-modal-content { padding: 20px; }.amber-presence-note { left: 20px; }
+}
+@media (pointer: coarse) {
+  .amber-mobile-controls { position: absolute; bottom: 83px; left: 22px; display: grid; grid-template-columns: repeat(3, 42px); gap: 5px; }
+  .amber-mobile-controls button { touch-action: none; border: 1px solid #e5c99266; background: #344b3bd9; color: #ecd3a2; height: 40px; border-radius: 6px; font-size: 22px; }.amber-mobile-controls button:first-child { grid-column: 2; }.amber-mobile-controls button:nth-child(2) { grid-column: 1; }
+  .amber-instructions { display: none; }.amber-resume { bottom: 60px; white-space: nowrap; }.amber-interact { bottom: 190px; }.amber-seated { bottom: 252px; font-size: 15px; }
+}
+@media (max-width: 520px) {
+  .amber-topbar nav > .amber-nav-button:first-child { display: none; }.amber-map { width: 105px; padding: 9px; bottom: 87px; }.amber-map-foot { font-size: 6px; }.amber-welcome-foot { font-size: 6px; gap: 10px; }.amber-welcome p { font-size: 11px; }.amber-desktop { display: none; }.amber-enter { padding: 15px 18px; }.amber-enter span { margin-left: 18px; }.amber-instructions > span:nth-child(2) { display: none; }
+}
+@media (max-height: 620px) and (min-width: 600px) {
+  .amber-welcome { top: 25%; }.amber-welcome h1 { font-size: 44px; margin: 15px 0; }.amber-welcome p { margin-bottom: 16px; }.amber-welcome-foot { margin-top: 18px; }.amber-location { display: none; }
+}
