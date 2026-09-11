@@ -14,3 +14,5 @@ CREATE TABLE IF NOT EXISTS casino_presence (
 CREATE UNIQUE INDEX IF NOT EXISTS casino_one_guest_per_seat
   ON casino_presence (room_id, seat_id) WHERE seat_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS casino_presence_expiry ON casino_presence (updated_at);
+-- Safe to re-run for existing rooms; only appearance metadata is added.
+ALTER TABLE casino_presence ADD COLUMN IF NOT EXISTS face_seed INTEGER NOT NULL DEFAULT 0;

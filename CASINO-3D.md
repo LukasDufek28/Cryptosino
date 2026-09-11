@@ -25,16 +25,25 @@ were run for this implementation. Browser verification is left to you.
 
 - Click Make yourself at home, then use WASD to walk and the mouse to look.
 - Arrow up/down also walk; arrow left/right turn. Shift walks faster.
+- Space jumps while standing.
 - If pointer lock is unavailable, drag the scene to look around.
 - E or the interaction prompt plays a nearby game, sits on a couch, or stands up.
 - Escape releases the cursor or closes a game screen.
 - Touch devices have movement buttons and drag-to-look controls.
-- Return upstairs restores the initial position; the map button toggles the map.
+- R or Return upstairs restores the initial position and clears jumping and movement; the map button toggles the map.
 
 Start on floor 02. The west staircase descends toward the windows to the
 reception floor. The center entrance opens onto the sidewalk. Floor 02 contains
 four game stations and two window-facing couches. Cars circulate on two lanes.
 The collection menu offers the same game screens without walking to a station.
+
+The ground-floor back wall, left of reception, has THE FACE PLACE: a real
+mirror and a coral-colored button. Approach the button and press E (or click
+the interaction prompt) to randomize your face. Each page visit starts with
+independently randomized pupil directions and a smile or frown. The face stays
+stable while walking or signing in, and other guests receive the same face seed.
+The mirror works without an account, uses a 512px reflection texture, and is
+disabled upstairs to avoid an unnecessary extra scene render.
 
 ## Code architecture
 
@@ -56,13 +65,20 @@ To enable shared presence, use the existing database connection and explicitly
 install the new schema:
 
 ```powershell
-npm run migrate:casino --workspace=backend
+npm.cmd run migrate:casino --workspace=backend
 ```
+
+Re-run this migration before using the face-sharing update, even if presence
+was installed previously: it adds the `face_seed` column. Until it is applied,
+the updated presence API falls back to solo mode. Use the same database as the
+deployment; the migration is not run automatically during build or startup.
 
 The additive migration creates `casino_presence`; it does not modify balances
 or bets. Two browsers signed in as different users will share the room. There
 is one presence per user per room; multiple tabs of one user share that identity.
-Positions refresh approximately every 1.5 seconds, inactive presence expires
+Polling waits 750ms after each response (plus network/server time), with only
+one request in flight. Hidden tabs pause updates and errors retain a slower
+retry interval. Inactive presence expires
 after 12 seconds, and a transaction prevents two users reserving the same seat.
 Movement is visually interpolated. This is an initial presence layer, not a
 finished real-time multiplayer game server. Chat and synchronized 3D games

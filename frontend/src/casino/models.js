@@ -113,13 +113,39 @@ export function car(parent, x, z, color, direction) {
   [-0.5, 0.5].forEach(a => box(g, [0.06, 0.18, 0.32], '#fff1ba', [1.77, 0.65, a], { emissive: '#ffd67a', emissiveIntensity: 0.8 }));
   return { group: g, direction, speed: 5 };
 }
-export function avatar(parent, username, color) {
+export function avatar(parent, username, color, faceSeed = 0) {
   const g = group(parent);
   cylinder(g, 0.24, 0.3, 0.65, color, [0, 1.03, 0], 6);
   mesh(g, new THREE.IcosahedronGeometry(0.24, 1), '#d3a082', [0, 1.65, 0]);
   [-0.13, 0.13].forEach(a => box(g, [0.2, 0.55, 0.22], '#3d4d4c', [a, 0.42, 0]));
   [-0.36, 0.36].forEach(a => box(g, [0.16, 0.55, 0.19], color, [a, 1.02, 0]));
   const name = sign(g, username.slice(0, 22), 1.7, [0, 2.17, 0]);
-  return { group: g, name };
+  const face = group(g, 0, 1.65, -0.2, Math.PI);
+  const pupils = [-0.095, 0.095].map(x => {
+    mesh(face, new THREE.SphereGeometry(0.085, 10, 8), '#fff8e6', [x, 0.045, 0.015]);
+    return mesh(face, new THREE.SphereGeometry(0.033, 8, 6), '#262c30', [x, 0.045, 0.092]);
+  });
+  const mouth = mesh(face, new THREE.BufferGeometry(), '#60362e');
+  let currentSeed;
+  function setFace(seed = 0) {
+    if (seed === currentSeed) return;
+    currentSeed = seed;
+    let state = seed >>> 0;
+    const random = () => { state = (Math.imul(state, 1664525) + 1013904223) >>> 0; return state / 4294967296; };
+    pupils.forEach((p, i) => {
+      const angle = random() * Math.PI * 2, radius = 0.045 * Math.sqrt(random());
+      p.position.set((i ? 0.095 : -0.095) + Math.cos(angle) * radius, 0.045 + Math.sin(angle) * radius, 0.092);
+    });
+    const smile = random() > 0.5 ? 1 : -1;
+    const width = 0.075 + random() * 0.035, bend = 0.025 + random() * 0.05;
+    const curve = new THREE.QuadraticBezierCurve3(
+      new THREE.Vector3(-width, -0.075, 0.055),
+      new THREE.Vector3((random() - 0.5) * 0.05, -0.075 - smile * bend * 2, 0.075),
+      new THREE.Vector3(width, -0.075, 0.055));
+    mouth.geometry.dispose();
+    mouth.geometry = new THREE.TubeGeometry(curve, 12, 0.012, 5, false);
+  }
+  setFace(faceSeed);
+  return { group: g, name, setFace };
 }
 export function clearMaterialCache() { materials.clear(); }

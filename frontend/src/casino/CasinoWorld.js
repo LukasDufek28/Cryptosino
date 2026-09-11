@@ -124,8 +124,8 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
     </>}
 
     <footer className="amber-bottom">
-      <div className="amber-instructions"><span><kbd>W A S D</kbd> Move</span><span><kbd>MOUSE</kbd> Look</span><span><kbd>SPACE</kbd> Jump</span><span><kbd>E</kbd> Interact</span><span><kbd>ESC</kbd> Cursor</span></div>
-      <button className="amber-reset" onClick={() => sceneRef.current?.home()} title="Return upstairs">Return upstairs ↗</button>
+      <div className="amber-instructions"><span><kbd>W A S D</kbd> Move</span><span><kbd>MOUSE</kbd> Look</span><span><kbd>SPACE</kbd> Jump</span><span><kbd>E</kbd> Interact</span><span><kbd>R</kbd> Reset position</span><span><kbd>ESC</kbd> Cursor</span></div>
+      <button className="amber-reset" onClick={() => sceneRef.current?.home()} title="Return upstairs (R)">Return upstairs ↗</button>
     </footer>
     {showMap && !panel && <MiniMap status={status} />}
     {presence.message && <div className="amber-presence-note" role="status">{presence.message}</div>}

@@ -3,6 +3,9 @@ import layout from './worldLayout.json';
 import buildWorld from './buildWorld';
 import { avatar, clearMaterialCache } from './models';
 
+// One face per page visit; remains stable through scene remounts and sign-in.
+let visitFaceSeed = Math.floor(Math.random() * 2147483647);
+
 export default function createScene(host, events) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color('#a9d5f2');
@@ -28,6 +31,9 @@ export default function createScene(host, events) {
   sun.shadow.camera.updateProjectionMatrix();
   sun.shadow.normalBias = 0.03; scene.add(sun);
   const world = buildWorld(scene);
+  const self = avatar(scene, '', '#769b87', visitFaceSeed);
+  self.name.visible = false;
+  self.group.traverse(object => object.layers.set(1));
   const peers = new Map();
   const pos = new THREE.Vector3(layout.spawn.x, layout.spawn.y, layout.spawn.z);
   let yaw = layout.spawn.yaw, pitch = -0.05, floor = 2, seat = null;
@@ -65,6 +71,11 @@ export default function createScene(host, events) {
     if (jumpHeight > 0 || jumpVelocity > 0) return;
     if (seat) { stand(); return; }
     if (!nearest) return;
+    if (nearest.kind === 'face') {
+      visitFaceSeed = (visitFaceSeed + 1 + Math.floor(Math.random() * 2147483646)) % 2147483647;
+      self.setFace(visitFaceSeed);
+      return;
+    }
     if (nearest.kind === 'seat') {
       seat = nearest.item; pos.set(seat.x, layout.upperFloor, seat.z); yaw = seat.yaw; pitch = -0.03;
       events.onSeat(seat.id);
@@ -72,8 +83,19 @@ export default function createScene(host, events) {
       keys.clear(); unlock(); events.onGame(nearest.item.game);
     }
   }
+  function home() {
+    stand(); clearInput(); jumpHeight = 0; jumpVelocity = 0;
+    pos.set(layout.spawn.x, layout.spawn.y, layout.spawn.z);
+    floor = 2; yaw = layout.spawn.yaw; pitch = -0.05;
+    camera.position.set(pos.x, pos.y + 1.65, pos.z);
+    nearest = null;
+  }
   function keyDown(e) {
-    if (!enabled || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+    if (!enabled || e.target.isContentEditable || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+    if (e.code === 'KeyR' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      if (!e.repeat) home();
+    }
     if (e.code === 'Space' && !e.target.closest('button, a, [contenteditable="true"]')) {
       e.preventDefault();
       if (!e.repeat) jump();
@@ -123,6 +145,12 @@ export default function createScene(host, events) {
   }
   function updateNearest() {
     nearest = null;
+    if (!seat && floor === 1 && pos.y < 0.1) {
+      camera.getWorldDirection(direction);
+      const item = world.faceButton;
+      focus.set(item.x - pos.x, 0, item.z - pos.z).normalize();
+      if (Math.hypot(pos.x - item.x, pos.z - item.z) < 3.4 && direction.dot(focus) > 0.12) nearest = { kind: 'face', item };
+    }
     if (!seat && pos.y > layout.upperFloor - 0.1) {
       camera.getWorldDirection(direction);
       let best = 3.4;
@@ -134,7 +162,7 @@ export default function createScene(host, events) {
         if (distance < best && direction.dot(focus) > 0.12) { nearest = option; best = distance; }
       });
     }
-    events.onStatus({ floor, x: pos.x, z: pos.z, yaw, prompt: seat ? 'Stand up' : nearest ? nearest.kind === 'seat' ? `Sit · ${nearest.item.name}` : `Play · ${nearest.item.name}` : '', locked: document.pointerLockElement === canvas });
+    events.onStatus({ floor, x: pos.x, z: pos.z, yaw, prompt: seat ? 'Stand up' : nearest ? nearest.kind === 'face' ? 'Randomize face' : nearest.kind === 'seat' ? `Sit · ${nearest.item.name}` : `Play · ${nearest.item.name}` : '', locked: document.pointerLockElement === canvas });
   }
   function resize() {
     const { width, height } = host.getBoundingClientRect();
@@ -177,6 +205,9 @@ export default function createScene(host, events) {
       }
       camera.position.set(pos.x, THREE.MathUtils.lerp(camera.position.y, pos.y + jumpHeight + (seat ? 1.55 : 1.65), Math.min(dt * 12, 1)), pos.z);
       camera.rotation.set(pitch, yaw, 0, 'YXZ');
+      self.group.position.set(pos.x, pos.y + jumpHeight - (seat ? 0.4 : 0), pos.z);
+      self.group.rotation.y = yaw;
+      world.mirror.visible = floor === 1;
       world.cars.forEach(c => { c.group.position.x += dt * c.direction * c.speed; if (c.group.position.x > 64) c.group.position.x = -64; if (c.group.position.x < -64) c.group.position.x = 64; });
       peers.forEach(p => {
         p.group.position.lerp(p.target, 1 - Math.exp(-dt * 7));
@@ -197,8 +228,8 @@ export default function createScene(host, events) {
     lock, interact, stand, jump,
     setEnabled(value) { enabled = value; if (!value) { clearInput(); unlock(); } },
     move(x, y) { touch.x = x; touch.y = y; },
-    home() { stand(); jumpHeight = 0; jumpVelocity = 0; pos.set(layout.spawn.x, layout.spawn.y, layout.spawn.z); floor = 2; yaw = layout.spawn.yaw; pitch = -0.05; },
-    pose() { return { x: pos.x, z: pos.z, yaw, floor, seatId: seat?.id || null }; },
+    home,
+    pose() { return { x: pos.x, z: pos.z, yaw, floor, seatId: seat?.id || null, faceSeed: visitFaceSeed }; },
     updatePeers(players) {
       const live = new Set(players.map(p => p.id));
       for (const [id, peer] of peers) if (!live.has(id)) { scene.remove(peer.group); disposeObject(peer.group); peers.delete(id); }
@@ -208,10 +239,12 @@ export default function createScene(host, events) {
           a.group.position.set(p.x, p.y, p.z); peers.set(p.id, { ...a, target: new THREE.Vector3(), yaw: p.yaw });
         }
         const peer = peers.get(p.id); peer.target.set(p.x, p.y - (p.seatId ? 0.4 : 0), p.z); peer.yaw = p.yaw;
+        peer.setFace(p.faceSeed || 0);
       });
     },
     dispose() {
       disposed = true; unlock(); renderer.setAnimationLoop(null); observer.disconnect();
+      world.mirror.getRenderTarget().dispose();
       document.removeEventListener('keydown', keyDown); document.removeEventListener('keyup', keyUp);
       document.removeEventListener('pointermove', pointerMove); window.removeEventListener('blur', clearInput);
       canvas.removeEventListener('pointerdown', pointerDown); canvas.removeEventListener('pointerup', pointerUp);

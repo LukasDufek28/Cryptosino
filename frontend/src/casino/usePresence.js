@@ -8,7 +8,7 @@ export default function usePresence(token, sceneRef, ready) {
     if (!ready || !token) { setPresence({ mode: 'solo', count: 1, message: '' }); return; }
     let stopped = false, timer, controller;
     async function sync() {
-      let delay = 1500;
+      let delay = 750;
       try {
         if (document.hidden) { timer = setTimeout(sync, 3000); return; }
         const pose = scene?.pose();

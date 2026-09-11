@@ -10,6 +10,10 @@ module.exports = function casinoRouter(authMiddleware) {
   router.get('/world', (req, res) => res.json(world));
   router.put('/presence', authMiddleware, async (req, res) => {
     const { x, z, yaw, seatId = null } = req.body;
+    const faceSeed = req.body.faceSeed ?? 0;
+    if (!Number.isInteger(faceSeed) || faceSeed < 0 || faceSeed > 2147483647) {
+      return res.status(400).json({ error: 'Invalid face.' });
+    }
     if (![x, z, yaw].every(v => typeof v === 'number' && Number.isFinite(v)) ||
         Math.abs(x) > 55 || z < -10 || z > 35 || Math.abs(yaw) > Math.PI * 2 + 0.01) {
       return res.status(400).json({ error: 'Invalid player position.' });
@@ -37,11 +41,11 @@ module.exports = function casinoRouter(authMiddleware) {
         await client.query('ROLLBACK');
         return res.status(409).json({ error: 'This room is full.' });
       }
-      await client.query(`INSERT INTO casino_presence (room_id,user_id,x,y,z,yaw,seat_id)
-        VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (room_id,user_id) DO UPDATE SET
-        x=EXCLUDED.x,y=EXCLUDED.y,z=EXCLUDED.z,yaw=EXCLUDED.yaw,seat_id=EXCLUDED.seat_id,updated_at=NOW()`,
-      [world.id, req.user.id, seat ? seat.x : x, y, seat ? seat.z : z, seat ? seat.yaw : yaw, seatId]);
-      const peers = await client.query(`SELECT p.user_id AS id,u.username,p.x,p.y,p.z,p.yaw,p.seat_id AS "seatId"
+      await client.query(`INSERT INTO casino_presence (room_id,user_id,x,y,z,yaw,seat_id,face_seed)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (room_id,user_id) DO UPDATE SET
+        x=EXCLUDED.x,y=EXCLUDED.y,z=EXCLUDED.z,yaw=EXCLUDED.yaw,seat_id=EXCLUDED.seat_id,face_seed=EXCLUDED.face_seed,updated_at=NOW()`,
+      [world.id, req.user.id, seat ? seat.x : x, y, seat ? seat.z : z, seat ? seat.yaw : yaw, seatId, faceSeed]);
+      const peers = await client.query(`SELECT p.user_id AS id,u.username,p.x,p.y,p.z,p.yaw,p.seat_id AS "seatId",p.face_seed AS "faceSeed"
         FROM casino_presence p JOIN users u ON u.id=p.user_id WHERE room_id=$1 AND user_id<>$2`, [world.id, req.user.id]);
       await client.query('COMMIT');
       res.json({ roomId: world.id, players: peers.rows, capacity: world.capacity });

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { Reflector } from 'three/examples/jsm/objects/Reflector.js';
 import layout from './worldLayout.json';
 import { box, cylinder, group, mesh, sign, plant, couch, floorLamp, pendant, slotMachine, gameTable, car } from './models';
 
@@ -93,6 +94,21 @@ export default function buildWorld(scene) {
   couch(building, 7, 0, 5); block(7, 5, 4, 1.4, 1);
   floorLamp(building, 9.8, 0, 5); plant(building, 12, 0, 8.4);
 
+  // A real reflection, with a separate camera layer for the first-person body.
+  box(building, [3.3, 2.9, 0.18], '#b99861', [-5, 1.65, -9.65]);
+  const mirror = new Reflector(new THREE.PlaneGeometry(3, 2.6), {
+    color: 0xffffff, textureWidth: 512, textureHeight: 512, clipBias: 0.003, multisample: 0
+  });
+  mirror.position.set(-5, 1.65, -9.54);
+  mirror.camera.layers.enable(1);
+  building.add(mirror);
+  sign(building, 'THE FACE PLACE', 3.2, [-5, 3.45, -9.5]);
+  const faceButton = { x: -2.6, z: -9.45, name: 'Randomize face' };
+  box(building, [0.65, 0.65, 0.18], '#b99861', [faceButton.x, 1.3, faceButton.z]);
+  const button = cylinder(building, 0.22, 0.22, 0.12, '#d88668', [faceButton.x, 1.3, faceButton.z + 0.14], 12);
+  button.rotation.x = Math.PI / 2;
+  sign(building, 'RANDOMIZE FACE', 1.6, [faceButton.x, 1.95, faceButton.z + 0.1]);
+
   // Upstairs: green felt, oak, brass, terracotta and lamps.
   box(building, [19.5, 0.032, 8.5], '#506b59', [2.3, upper + 0.035, -4.9]);
   box(building, [19.1, 0.035, 8.1], '#365345', [2.3, upper + 0.04, -4.9]);
@@ -120,5 +136,5 @@ export default function buildWorld(scene) {
     const m = new THREE.Mesh(new THREE.RingGeometry(0.43, 0.48, 32), new THREE.MeshBasicMaterial({ color: '#e4bc73', side: THREE.DoubleSide, transparent: true, opacity: 0.75 }));
     m.rotation.x = -Math.PI / 2; m.position.set(s.x, upper + 0.07, s.z + 2.5); building.add(m); return m;
   });
-  return { cars, obstacles, markers };
+  return { cars, obstacles, markers, mirror, faceButton };
 }
