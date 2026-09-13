@@ -39,7 +39,7 @@ export default function createScene(host, events) {
   const peers = new Map();
   const pos = new THREE.Vector3(layout.spawn.x, layout.spawn.y, layout.spawn.z);
   let yaw = layout.spawn.yaw, pitch = -0.05, floor = 2, seat = null;
-  let wasOnStairs = false;
+  let traversingStairs = false;
   let jumpHeight = 0, jumpVelocity = 0;
   const gravity = 18, jumpSpeed = 5.5;
   const playerRadius = 0.45;
@@ -95,7 +95,7 @@ export default function createScene(host, events) {
   function home() {
     stand(); clearInput(); jumpHeight = 0; jumpVelocity = 0;
     pos.set(layout.spawn.x, layout.spawn.y, layout.spawn.z);
-    floor = 2; yaw = layout.spawn.yaw; pitch = -0.05;
+    floor = 2; traversingStairs = false; yaw = layout.spawn.yaw; pitch = -0.05;
     poseRevision += 1;
     camera.position.set(pos.x, pos.y + 1.65, pos.z);
     nearest = null;
@@ -148,7 +148,6 @@ export default function createScene(host, events) {
     const s = layout.stairs;
     const inStairLane = value => value > s.walkMinX && value < s.walkMaxX;
     const inStairRun = value => value < s.bottomZ && value > s.topZ;
-    const onStairs = inStairLane(pos.x) && inStairRun(pos.z);
     const nextOnStairs = inStairLane(x) && inStairRun(z);
     const sideBarrierDepth = (px, pz) => {
       const top = s.topZ - playerRadius, bottom = s.bottomZ + playerRadius;
@@ -177,11 +176,12 @@ export default function createScene(host, events) {
       // exit, but can never move farther into the barrier.
       if (currentBarrierDepth <= 0 || nextBarrierDepth >= currentBarrierDepth) return false;
     }
-    if (onStairs && inStairRun(z) && !inStairLane(x)) return false;
-    if (nextOnStairs && !onStairs) {
-      if (!inStairLane(pos.x)) return false;
-      if (floor === 1 && pos.z < s.bottomZ) return false;
-      if (floor === 2 && pos.z > s.topZ) return false;
+    if (traversingStairs && inStairRun(z) && !inStairLane(x)) return false;
+    if (nextOnStairs && !traversingStairs) {
+      const entersFromBottom = floor === 1 && inStairLane(pos.x) && pos.z >= s.bottomZ;
+      const entersFromTop = floor === 2 && inStairLane(pos.x) && pos.z <= s.topZ;
+      if (!entersFromBottom && !entersFromTop) return false;
+      traversingStairs = true;
     }
     if (world.obstacles.some(o => o.floor === floor && Math.abs(x - o.x) < o.w / 2 + 0.24 && Math.abs(z - o.z) < o.d / 2 + 0.24)) return false;
     return true;
@@ -190,16 +190,16 @@ export default function createScene(host, events) {
     const s = layout.stairs;
     const inLane = pos.x > s.walkMinX && pos.x < s.walkMaxX;
     const onStairs = inLane && pos.z > s.topZ && pos.z < s.bottomZ;
-    if (onStairs) {
+    if (traversingStairs && onStairs) {
       pos.y = layout.upperFloor * (s.bottomZ - pos.z) / (s.bottomZ - s.topZ);
     } else {
-      // Only completing a real traversal changes floors. Merely walking into
-      // the footprint below the upper landing must leave the player downstairs.
-      if (wasOnStairs && inLane && pos.z <= s.topZ) floor = 2;
-      else if (wasOnStairs && inLane && pos.z >= s.bottomZ) floor = 1;
+      // Only an explicitly started traversal can change height or floors.
+      // The room beneath the upper landing therefore remains entirely flat.
+      if (traversingStairs && inLane && pos.z <= s.topZ) floor = 2;
+      else if (traversingStairs && inLane && pos.z >= s.bottomZ) floor = 1;
       pos.y = floor === 2 ? layout.upperFloor : 0;
+      traversingStairs = false;
     }
-    wasOnStairs = onStairs;
   }
   function updateNearest() {
     nearest = null;
