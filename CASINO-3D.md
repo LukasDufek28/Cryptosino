@@ -98,9 +98,11 @@ HTTP setup polling runs around 800ms while connecting and 3s when connected;
 high-frequency movement never touches the database. Balances refresh with the
 slow authenticated roster. Both browsers must sign in with different accounts.
 
-A hidden/closed host releases its lease; crashes expire after 12 seconds. Another
-active browser is elected and WebRTC connections are rebuilt. Reconnection is
-not seamless: expect a pause. Keep host and guest tabs visible. Expired control
+A closed host releases its lease; crashes expire after 12 seconds. Brief Alt-Tab
+switches keep existing connections and heartbeats instead of leaving the room.
+Browsers may throttle or suspend long-hidden tabs: another active browser is
+then elected and WebRTC connections are rebuilt. Reconnection is not seamless:
+expect a pause. Keep host and guest tabs visible for full update speed. Expired control
 plane leases stop transmission, preventing an isolated old host from continuing.
 World traffic time survives host changes; individual poses are sent again by
 their owning clients. Offline visitors can explore solo, but are not room members.

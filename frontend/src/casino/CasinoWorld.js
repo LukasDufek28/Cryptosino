@@ -132,7 +132,7 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
     </footer>
     {showMap && !panel && <MiniMap status={status} />}
     {presence.message && <div className="amber-presence-note" role="status">{presence.message}</div>}
-    <PlayerList enabled={!welcome && !panel && !error} presence={presence} user={user} balance={balance} />
+    <PlayerList enabled={!welcome && !panel && !error} presence={presence} user={user} balance={balance} sceneRef={sceneRef} />
     {error && <div className="amber-error" role="alert"><h2>A moment, please.</h2><p>{error}</p><button className="amber-pill" onClick={() => window.location.reload()}>Reload</button> <Link to="/lobby">Open classic casino</Link></div>}
 
     {panel === 'directory' && <Dialog title="The collection" onClose={closePanel}>

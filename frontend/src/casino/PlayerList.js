@@ -2,28 +2,28 @@ import React, { useEffect, useState } from 'react';
 
 const money = value => Number.isFinite(Number(value)) ? `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
 
-export default function PlayerList({ enabled, presence, user, balance }) {
+export default function PlayerList({ enabled, presence, user, balance, sceneRef }) {
   const [held, setHeld] = useState(false);
   const [pinned, setPinned] = useState(false);
   useEffect(() => {
     if (!enabled) { setHeld(false); setPinned(false); return; }
     const down = e => {
-      // Preserve normal Tab navigation in forms, menus and with modifier keys.
+      // During gameplay, HUD button focus must not turn Tab into page navigation.
       if (e.code !== 'Tab' || e.ctrlKey || e.metaKey || e.altKey || e.shiftKey ||
-          e.target.isContentEditable || /INPUT|TEXTAREA|SELECT|BUTTON|A/.test(e.target.tagName)) return;
-      e.preventDefault(); setHeld(true);
+          e.target.isContentEditable || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+      e.preventDefault(); e.stopPropagation(); sceneRef.current?.focus(); setHeld(true);
     };
     const up = e => { if (e.code === 'Tab') setHeld(false); };
     const clear = () => { setHeld(false); setPinned(false); };
-    document.addEventListener('keydown', down);
+    document.addEventListener('keydown', down, true);
     document.addEventListener('keyup', up);
     window.addEventListener('blur', clear);
     document.addEventListener('visibilitychange', clear);
     return () => {
-      document.removeEventListener('keydown', down); document.removeEventListener('keyup', up);
+      document.removeEventListener('keydown', down, true); document.removeEventListener('keyup', up);
       window.removeEventListener('blur', clear); document.removeEventListener('visibilitychange', clear);
     };
-  }, [enabled]);
+  }, [enabled, sceneRef]);
   if (!enabled) return null;
   const players = presence.players?.length ? presence.players : user ? [{ id: user.id, username: user.username, balance, isSelf: true, isHost: false }] : [];
   return <>

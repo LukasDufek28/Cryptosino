@@ -25,14 +25,14 @@ export default function browserRoom(token, scene, onStatus) {
   const sessionId = window.crypto.randomUUID();
   const links = new Map(), states = new Map();
   let roster = new Map(), host = null, generation = 0, selfId = null;
-  let stopped = false, suspended = document.hidden, timer, controller, inSync = false;
+  let stopped = false, timer, controller, inSync = false;
   let outbox = [], ack = '0', lastSync = 0, packetSeq = 0, snapshotSeq = -1;
   let iceServers = [], relayConfigured = false, lastStatus = '', errorMessage = '';
   let worldAnchor = 0, worldAt = performance.now(), worldReady = false;
   let lastSnapshot = 0, lastUI = 0, lastEventRevision = -1;
   const isHost = () => host === sessionId;
   const worldSeconds = () => worldAnchor + (performance.now() - worldAt) / 1000;
-  const active = () => !stopped && !suspended && lastSync > 0 && performance.now() - lastSync < 10000;
+  const active = () => !stopped && lastSync > 0 && performance.now() - lastSync < 10000;
   function status() {
     const count = isHost() ? states.size : (scene.peerCount?.() || 0) + 1;
     const connected = active() && (isHost() || (lastSnapshot > 0 && performance.now() - lastSnapshot < 3000));
@@ -156,7 +156,7 @@ export default function browserRoom(token, scene, onStatus) {
       }
       await link.pc.setLocalDescription(type === 'offer' ? await link.pc.createOffer() : await link.pc.createAnswer());
       await gather(link);
-      if (!stopped && !suspended && savedGeneration === generation && links.get(link.id) === link) {
+      if (!stopped && savedGeneration === generation && links.get(link.id) === link) {
         outbox.push({ id: window.crypto.randomUUID(), to: link.id, connection: link.connection,
           type, sdp: link.pc.localDescription.sdp });
       }
@@ -178,7 +178,7 @@ export default function browserRoom(token, scene, onStatus) {
     }
   }
   async function sync() {
-    if (stopped || suspended || inSync) return;
+    if (stopped || inSync) return;
     inSync = true;
     let delay = 1000;
     // Keep SDP batches below Express's default JSON request size limit.
@@ -190,7 +190,7 @@ export default function browserRoom(token, scene, onStatus) {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ sessionId, generation, ack, signals: batch }), signal: controller.signal });
       const data = await response.json();
-      if (stopped || suspended) return;
+      if (stopped) return;
       if (!response.ok) throw new Error(data.error || 'Room setup unavailable.');
       lastSync = performance.now(); errorMessage = '';
       outbox = outbox.filter(s => !batch.some(b => b.id === s.id));
@@ -224,11 +224,11 @@ export default function browserRoom(token, scene, onStatus) {
       }
       status();
     } catch (error) {
-      if (!stopped && !suspended) { errorMessage = error.message || 'Room setup unavailable; exploring solo.'; status(); }
+      if (!stopped) { errorMessage = error.message || 'Room setup unavailable; exploring solo.'; status(); }
       delay = 4000;
     } finally {
       clearTimeout(timeout); inSync = false;
-      if (!stopped && !suspended) timer = setTimeout(sync, delay);
+      if (!stopped) timer = setTimeout(sync, delay);
     }
   }
   function tick() {
@@ -258,16 +258,16 @@ export default function browserRoom(token, scene, onStatus) {
       headers: { Authorization: `Bearer ${token}` }, keepalive: true }).catch(() => {});
   }
   function visibility() {
-    suspended = document.hidden;
-    if (suspended) {
-      clearTimeout(timer); controller?.abort(); disconnect(); lastSync = 0;
-      void leave(); errorMessage = 'Room paused while this tab is hidden.'; status();
-    } else { errorMessage = ''; clearTimeout(timer); timer = setTimeout(sync, 500); }
+    // Alt-Tab is not leaving the room. Keep healthy channels and heartbeats.
+    // Browsers can still suspend long-hidden tabs; leases handle actual freezes.
+    if (!document.hidden && !stopped && !inSync) {
+      clearTimeout(timer); timer = setTimeout(sync, 500);
+    }
   }
   const tickTimer = setInterval(tick, TICK_MS);
   document.addEventListener('visibilitychange', visibility);
   window.addEventListener('pagehide', leave);
-  if (!suspended) void sync();
+  void sync();
   return () => {
     stopped = true; clearTimeout(timer); clearInterval(tickTimer); controller?.abort();
     document.removeEventListener('visibilitychange', visibility); window.removeEventListener('pagehide', leave);

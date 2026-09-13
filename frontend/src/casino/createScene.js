@@ -15,7 +15,7 @@ export default function createScene(host, events) {
   const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.6));
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.15;
@@ -256,6 +256,7 @@ export default function createScene(host, events) {
   }
   return {
     lock, interact, stand, jump,
+    focus() { if (enabled && !disposed) canvas.focus({ preventScroll: true }); },
     setEnabled(value) { enabled = value; if (!value) { clearInput(); unlock(); } },
     move(x, y) { touch.x = x; touch.y = y; },
     home,
