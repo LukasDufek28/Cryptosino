@@ -15,6 +15,7 @@ const games = {
   crash: lazy(() => import('../CrashGame'))
 };
 const gameNames = { slots: 'Golden reels', blackjack: 'The twenty-one club', dice: 'Lucky pair', crash: 'Skyline' };
+const API_URL = process.env.REACT_APP_API_URL || '';
 
 function MiniMap({ status }) {
   return <div className="amber-map" aria-label={`Floor ${status.floor} map`}>
@@ -72,11 +73,30 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
   const [activeGame, setActiveGame] = useState(null);
   const [showMap, setShowMap] = useState(true);
   const openGameRef = useRef(null);
+  const resetBalanceRef = useRef(null);
+  const resetBusyRef = useRef(false);
   openGameRef.current = game => { setActiveGame(game); setPanel(token && user ? 'game' : 'auth'); };
+  resetBalanceRef.current = async () => {
+    if (!token) { setActiveGame(null); setPanel('auth'); return; }
+    if (resetBusyRef.current) return;
+    resetBusyRef.current = true;
+    try {
+      const response = await fetch(`${API_URL}/api/reset-balance`, {
+        method: 'POST', headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = await response.json();
+      if (response.ok) setBalance(Number(data.balance));
+      else alert(data.error || 'Reset failed');
+    } catch {
+      alert('Network error');
+    } finally {
+      resetBusyRef.current = false;
+    }
+  };
   useEffect(() => {
     let instance;
     try {
-      instance = createScene(host.current, { onGame: game => openGameRef.current(game), onStatus: setStatus, onSeat: setSeat, onError: setError });
+      instance = createScene(host.current, { onGame: game => openGameRef.current(game), onResetBalance: () => resetBalanceRef.current(), onStatus: setStatus, onSeat: setSeat, onError: setError });
       sceneRef.current = instance; setReady(true);
     } catch {
       setError('The 3D room could not start. Enable hardware acceleration and use a browser with WebGL 2 support.');

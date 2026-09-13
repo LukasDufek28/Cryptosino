@@ -148,4 +148,34 @@ export function avatar(parent, username, color, faceSeed = 0) {
   setFace(faceSeed);
   return { group: g, name, setFace };
 }
+export function receptionist(parent, x, y, z) {
+  const g = group(parent, x, y, z);
+  cylinder(g, 0.28, 0.34, 0.72, '#6f8171', [0, 1.08, 0], 8);
+  box(g, [0.72, 0.18, 0.32], '#d8c29c', [0, 1.42, 0]);
+  mesh(g, new THREE.IcosahedronGeometry(0.29, 2), '#d3a082', [0, 1.78, 0]);
+  mesh(g, new THREE.SphereGeometry(0.3, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), '#49372f', [0, 1.91, -0.03]);
+  const eyeY = 1.82, eyeZ = 0.245;
+  const pupils = [-0.105, 0.105].map(eyeX => {
+    mesh(g, new THREE.SphereGeometry(0.082, 10, 8), '#fff8e6', [eyeX, eyeY, eyeZ]);
+    return { eyeX, mesh: mesh(g, new THREE.SphereGeometry(0.034, 8, 6), '#26302d', [eyeX, eyeY, eyeZ + 0.07]) };
+  });
+  const localTarget = new THREE.Vector3();
+  function trackNearest(players) {
+    let nearest = null, nearestDistance = Infinity;
+    for (const player of players) {
+      if (!player || player.y > y + 2.5) continue;
+      const distance = Math.hypot(player.x - g.position.x, player.z - g.position.z);
+      if (distance < nearestDistance) { nearest = player; nearestDistance = distance; }
+    }
+    let horizontal = 0, vertical = 0;
+    if (nearest && nearestDistance < 18) {
+      localTarget.set(nearest.x, nearest.y + 1.65, nearest.z);
+      g.worldToLocal(localTarget);
+      horizontal = THREE.MathUtils.clamp(localTarget.x / Math.max(Math.abs(localTarget.z), 1) * 0.045, -0.052, 0.052);
+      vertical = THREE.MathUtils.clamp((localTarget.y - eyeY) / Math.max(nearestDistance, 1) * 0.035, -0.035, 0.035);
+    }
+    pupils.forEach(pupil => pupil.mesh.position.set(pupil.eyeX + horizontal, eyeY + vertical, eyeZ + 0.07));
+  }
+  return { group: g, trackNearest };
+}
 export function clearMaterialCache() { materials.clear(); }

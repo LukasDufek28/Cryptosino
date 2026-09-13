@@ -78,6 +78,9 @@ export default function createScene(host, events) {
     if (jumpHeight > 0 || jumpVelocity > 0) return;
     if (seat) { stand(); return; }
     if (!nearest) return;
+    if (nearest.kind === 'reset') {
+      keys.clear(); events.onResetBalance(); return;
+    }
     if (nearest.kind === 'face') {
       visitFaceSeed = (visitFaceSeed + 1 + Math.floor(Math.random() * 2147483646)) % 2147483647;
       self.setFace(visitFaceSeed);
@@ -215,9 +218,13 @@ export default function createScene(host, events) {
     nearest = null;
     if (!seat && floor === 1 && pos.y < 0.1) {
       camera.getWorldDirection(direction);
-      const item = world.faceButton;
-      focus.set(item.x - pos.x, 0, item.z - pos.z).normalize();
-      if (Math.hypot(pos.x - item.x, pos.z - item.z) < 3.4 && direction.dot(focus) > 0.12) nearest = { kind: 'face', item };
+      let best = 3.4;
+      [{ kind: 'face', item: world.faceButton }, { kind: 'reset', item: world.resetButton }].forEach(option => {
+        const item = option.item;
+        const distance = Math.hypot(pos.x - item.x, pos.z - item.z);
+        focus.set(item.x - pos.x, 0, item.z - pos.z).normalize();
+        if (distance < best && direction.dot(focus) > 0.12) { nearest = option; best = distance; }
+      });
     }
     if (!seat && pos.y > layout.upperFloor - 0.1) {
       camera.getWorldDirection(direction);
@@ -230,7 +237,7 @@ export default function createScene(host, events) {
         if (distance < best && direction.dot(focus) > 0.12) { nearest = option; best = distance; }
       });
     }
-    events.onStatus({ floor, x: pos.x, z: pos.z, yaw, prompt: seat ? 'Stand up' : nearest ? nearest.kind === 'face' ? 'Randomize face' : nearest.kind === 'seat' ? `Sit · ${nearest.item.name}` : `Play · ${nearest.item.name}` : '', locked: document.pointerLockElement === canvas });
+    events.onStatus({ floor, x: pos.x, z: pos.z, yaw, prompt: seat ? 'Stand up' : nearest ? nearest.kind === 'face' ? 'Randomize face' : nearest.kind === 'reset' ? 'Ask for $1,000 reset' : nearest.kind === 'seat' ? `Sit · ${nearest.item.name}` : `Play · ${nearest.item.name}` : '', locked: document.pointerLockElement === canvas });
   }
   function resize() {
     const { width, height } = host.getBoundingClientRect();
@@ -278,6 +285,7 @@ export default function createScene(host, events) {
       camera.rotation.set(pitch, yaw, 0, 'YXZ');
       self.group.position.set(pos.x, pos.y + jumpHeight - (seat ? 0.4 : 0), pos.z);
       self.group.rotation.y = yaw;
+      world.receptionist.trackNearest([self.group.position, ...[...peers.values()].map(peer => peer.group.position)]);
       world.mirror.visible = floor === 1;
       localWorldSeconds = worldClock ? worldClock() : localWorldSeconds + dt;
       world.cars.forEach((c, i) => {
