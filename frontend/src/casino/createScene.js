@@ -150,6 +150,17 @@ export default function createScene(host, events) {
     const inStairRun = value => value < s.bottomZ && value > s.topZ;
     const onStairs = inStairLane(pos.x) && inStairRun(pos.z);
     const nextOnStairs = inStairLane(x) && inStairRun(z);
+    const sideBarrierDepth = (px, pz) => {
+      const top = s.topZ - playerRadius, bottom = s.bottomZ + playerRadius;
+      if (pz <= top || pz >= bottom) return 0;
+      let left, right;
+      if (px > s.minX - playerRadius && px <= s.walkMinX) {
+        left = s.minX - playerRadius; right = s.walkMinX;
+      } else if (px >= s.walkMaxX && px < s.maxX + playerRadius) {
+        left = s.walkMaxX; right = s.maxX + playerRadius;
+      } else return 0;
+      return Math.min(px - left, right - px, pz - top, bottom - pz);
+    };
     if (floor === 2 && (x > 13.4 || x < -13.4 || z > 9.35)) return false;
     if (z < 10 && Math.abs(x) > 13.4) return false;
     // Glazing is solid except for the reception entrance.
@@ -157,13 +168,14 @@ export default function createScene(host, events) {
     // The rails are solid along the whole flight. A player can enter only from
     // the landing that belongs to their current floor, never from the side or
     // from the small ground-floor space beneath the upper landing.
-    if (inStairRun(z) && !nextOnStairs) {
-      const besideRight = x >= s.maxX && x < s.maxX + playerRadius;
-      const besideLeft = x <= s.minX && x > s.minX - playerRadius;
-      const alreadyBesideRight = inStairRun(pos.z) && pos.x >= s.maxX && pos.x < s.maxX + playerRadius;
-      const alreadyBesideLeft = inStairRun(pos.z) && pos.x <= s.minX && pos.x > s.minX - playerRadius;
-      if (besideRight && (!alreadyBesideRight || x < pos.x)) return false;
-      if (besideLeft && (!alreadyBesideLeft || x > pos.x)) return false;
+    // Extend both side barriers around the end corners. This seals the narrow
+    // wall-side pocket and prevents diagonal movement around either rail end.
+    const nextBarrierDepth = sideBarrierDepth(x, z);
+    if (nextBarrierDepth > 0) {
+      const currentBarrierDepth = sideBarrierDepth(pos.x, pos.z);
+      // A player left in an old invalid position may move toward the nearest
+      // exit, but can never move farther into the barrier.
+      if (currentBarrierDepth <= 0 || nextBarrierDepth >= currentBarrierDepth) return false;
     }
     if (onStairs && inStairRun(z) && !inStairLane(x)) return false;
     if (nextOnStairs && !onStairs) {
