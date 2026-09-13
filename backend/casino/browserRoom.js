@@ -48,7 +48,7 @@ module.exports = function browserRoom(authMiddleware) {
       }
       await client.query(`INSERT INTO casino_browser_members(session_id,room_id,user_id) VALUES($1,$2,$3)
         ON CONFLICT(session_id) DO UPDATE SET updated_at=NOW()`, [sessionId, world.id, req.user.id]);
-      const roster = (await client.query(`SELECT m.session_id AS "sessionId",u.id,u.username FROM casino_browser_members m
+      const roster = (await client.query(`SELECT m.session_id AS "sessionId",u.id,u.username,u.balance FROM casino_browser_members m
         JOIN users u ON u.id=m.user_id WHERE m.room_id=$1 ORDER BY m.joined_at,m.session_id`, [world.id])).rows;
       if (!roster.some(m => m.sessionId === room.host_session)) {
         room.host_session = roster[0].sessionId;

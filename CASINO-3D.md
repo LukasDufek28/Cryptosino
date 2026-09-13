@@ -8,8 +8,8 @@ without a login. Sign in at a game station to open the existing game screen.
 From `D:\Documents\ChatGPT\Cryptosino\Cryptosino`:
 
 ```powershell
-npm install
-npm run dev
+npm.cmd install
+npm.cmd run dev
 ```
 
 Then open http://localhost:3000. The launcher starts Express on port 5000 and
@@ -18,14 +18,17 @@ Backend credentials belong in `backend/.env`; never put database or JWT secrets
 in frontend environment variables. The development launcher uses same-origin
 API calls even if an old frontend URL is configured in your shell.
 
-No tests, build, browser session, database migration, or production deployment
-were run for this implementation. Browser verification is left to you.
+No automated tests are created or run at the user's request. Production builds
+check compilation; real browser-to-browser behavior still needs browser review.
 
 ## Controls and space
 
 - Click Make yourself at home, then use WASD to walk and the mouse to look.
 - Arrow up/down also walk; arrow left/right turn. Shift walks faster.
 - Space jumps while standing.
+- Hold Tab in the scene to see room players, server balances, and the host badge.
+  Release to close; the Players button toggles it for touch/accessibility.
+  Tab keeps its normal keyboard-navigation behavior inside forms and dialogs.
 - If pointer lock is unavailable, drag the scene to look around.
 - E or the interaction prompt plays a nearby game, sits on a couch, or stands up.
 - Escape releases the cursor or closes a game screen.
@@ -55,11 +58,13 @@ both client and server. It defines spawn, stairs, stations, seats and capacity.
 `CasinoWorld.js` owns the HUD and existing game overlays. The wallet and login
 remain in App. Game outcomes still use their original backend endpoints.
 
-`backend/casino/router.js` adds a public world manifest and authenticated presence
-updates. `usePresence.js` sends one update at a time and interpolates other guests.
-It gracefully falls back to solo exploration if the database is unavailable.
+`backend/casino/router.js` retains the legacy presence endpoint for old clients.
+New clients use `browserRoom.js` on frontend/backend: PostgreSQL handles only
+authenticated discovery, host election, leases, and WebRTC SDP exchange.
+`usePresence.js` owns the transport lifecycle. Room names and balances in the Tab
+list come from authenticated backend responses, never untrusted peer packets.
 
-## Optional shared-room foundation
+## Browser-hosted rooms
 
 To enable shared presence, use the existing database connection and explicitly
 install the new schema:
@@ -68,21 +73,41 @@ install the new schema:
 npm.cmd run migrate:casino --workspace=backend
 ```
 
-Re-run this migration before using the face-sharing update, even if presence
-was installed previously: it adds the `face_seed` column. Until it is applied,
-the updated presence API falls back to solo mode. Use the same database as the
-deployment; the migration is not run automatically during build or startup.
+Re-run this additive migration for browser hosting: it creates three
+`casino_browser_*` tables as well as the earlier presence schema. Use the same
+database as the deployment. Builds and server startup never run migrations.
 
-The additive migration creates `casino_presence`; it does not modify balances
-or bets. Two browsers signed in as different users will share the room. There
-is one presence per user per room; multiple tabs of one user share that identity.
-Polling waits 750ms after each response (plus network/server time), with only
-one request in flight. Hidden tabs pause updates and errors retain a slower
-retry interval. Inactive presence expires
-after 12 seconds, and a transaction prevents two users reserving the same seat.
-Movement is visually interpolated. This is an initial presence layer, not a
-finished real-time multiplayer game server. Chat and synchronized 3D games
-are not implemented in this chapter.
+The oldest active browser automatically hosts the room. Guests connect to the
+host in a star topology. Movement snapshots target one send every 30ms (~33Hz),
+using unordered, non-retransmitted packets with sequence checks and bounded
+send buffers. Discrete seat/stand, face, reset, and jump changes also use an
+ordered reliable channel. The host arbitrates occupied seats and shares the
+street traffic clock. Local movement/camera are never replaced by a snapshot.
+
+The 30ms interval is not a latency guarantee: host relaying, distance, jitter,
+browser scheduling and interpolation add delay. Setup may take several seconds.
+HTTP setup polling runs around 800ms while connecting and 3s when connected;
+high-frequency movement never touches the database. Balances refresh with the
+slow authenticated roster. Both browsers must sign in with different accounts.
+
+A hidden/closed host releases its lease; crashes expire after 12 seconds. Another
+active browser is elected and WebRTC connections are rebuilt. Reconnection is
+not seamless: expect a pause. Keep host and guest tabs visible. Expired control
+plane leases stop transmission, preventing an isolated old host from continuing.
+World traffic time survives host changes; individual poses are sent again by
+their owning clients. Offline visitors can explore solo, but are not room members.
+
+WebRTC direct connections may expose peer IP addresses. The default uses Google's
+public STUN service. Some NAT/firewall combinations need TURN; good Wi-Fi does not
+remove this requirement. No relay account is provisioned automatically. Optional
+backend-only `CASINO_TURN_URLS` and `CASINO_TURN_SECRET` configure a coturn-compatible
+shared-secret relay. The backend issues one-hour credentials, never the shared
+secret. Configure them in both the local backend environment and Vercel secrets
+when needed. Do not put permanent relay secrets in frontend environment variables.
+
+Without a working direct or relay route, the HUD reports a connection problem;
+it does not pretend 30ms multiplayer is active. Browser-hosted state is cosmetic,
+not cheat-proof. Chat and live 3D casino games are not implemented yet.
 
 For later multiplayer games, retain this room/station contract and add a
 dedicated room simulation service with an authoritative game clock and movement

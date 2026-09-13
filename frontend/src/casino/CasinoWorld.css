@@ -82,6 +82,30 @@
 .amber-error p { font-size: 13px; line-height: 1.7; }
 .amber-error a { color: #e5c795; font-size: 12px; }
 .amber-mobile-controls { display: none; }
+.amber-roster-toggle { position: absolute; top: 155px; right: 40px; display: flex; gap: 9px; align-items: center; border: 1px solid #d9c18f66; background: #20392ddb; color: #f5e7ce; border-radius: 5px; padding: 9px 13px; font-size: 11px !important; }
+.amber-roster { position: absolute; z-index: 8; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(820px, 92vw); max-height: 78dvh; display: flex; flex-direction: column; background: #182f2af5; border: 1px solid #d7bc86; border-top: 3px solid #d7bc86; box-shadow: 0 20px 90px #0008; backdrop-filter: blur(12px); pointer-events: none; }
+.amber-roster > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 24px 28px; }
+.amber-roster h2 { font: 32px Georgia, serif; margin: 8px 0 0; color: #f2d9ac; }
+.amber-roster > header > span { font-size: 10px; letter-spacing: .12em; }
+.amber-roster-scroll { overflow: auto; pointer-events: auto; }
+.amber-roster table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.amber-roster th { text-transform: uppercase; font-size: 9px; letter-spacing: .15em; color: #b6c6b9; background: #10251f; text-align: left; padding: 13px 24px; }
+.amber-roster td { padding: 14px 24px; border-bottom: 1px solid #e4cf9f18; color: #eddfc4; }
+.amber-roster th:nth-child(2), .amber-roster td:nth-child(2) { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.amber-roster td:first-child { overflow-wrap: anywhere; }
+.amber-roster-self { background: #55775b44; box-shadow: inset 3px 0 #b9d09b; }
+.amber-roster td small { font-size: 8px; margin-left: 9px; color: #c6d8b0; }
+.amber-roster-avatar { display: inline-grid; place-items: center; width: 28px; height: 28px; margin-right: 13px; background: #84987844; color: #e1c78e; border: 1px solid #adba9866; }
+.amber-host-badge { font-size: 9px; letter-spacing: .1em; color: #1f3329; background: #e4c991; padding: 5px 9px; border-radius: 2px; }
+.amber-roster > footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 16px 24px; color: #b8c6b6; font-size: 9px; }
+.amber-roster > p { padding: 12px 24px; font-size: 13px; }
+@media (max-width: 600px) {
+  .amber-roster-toggle { right: 20px; top: 140px; }
+  .amber-roster td, .amber-roster th { padding: 12px 10px; }
+  .amber-roster-avatar { display: none; }
+  .amber-roster > header { padding: 18px; }
+  .amber-roster h2 { font-size: 26px; }
+}
 @media (max-width: 800px) {
   .amber-topbar { padding: 20px; }.amber-topbar nav { gap: 13px; }.amber-brand strong { font-size: 9px; }.amber-brand small { font-size: 6px; }.amber-brand-mark { width: 35px; height: 40px; }.amber-brand { gap: 9px; }
   .amber-nav-button { font-size: 10px !important; }.amber-nav-button span { display: none; }.amber-wallet { display: none; }.amber-pill { padding: 10px 16px; }

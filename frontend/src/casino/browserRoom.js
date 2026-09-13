@@ -38,7 +38,11 @@ export default function browserRoom(token, scene, onStatus) {
     const connected = active() && (isHost() || (lastSnapshot > 0 && performance.now() - lastSnapshot < 3000));
     const message = errorMessage || (!connected ? 'Connecting browser room…' : '');
     const state = { mode: connected ? 'shared' : 'solo', count: Math.max(1, count),
-      role: connected ? isHost() ? 'host' : 'guest' : 'connecting', message };
+      role: connected ? isHost() ? 'host' : 'guest' : 'connecting', message,
+      players: active() ? [...roster.values()].map(member => ({
+        id: member.id, username: member.username, balance: member.balance,
+        isSelf: member.sessionId === sessionId, isHost: member.sessionId === host
+      })) : [] };
     const key = JSON.stringify(state);
     if (key !== lastStatus) { lastStatus = key; onStatus(state); }
   }
@@ -46,6 +50,8 @@ export default function browserRoom(token, scene, onStatus) {
     const link = links.get(id);
     if (!link) return;
     links.delete(id); states.delete(id);
+    outbox = outbox.filter(message => message.to !== id);
+    link.cancelGather?.();
     link.pc.close();
   }
   function disconnect() {
@@ -85,6 +91,7 @@ export default function browserRoom(token, scene, onStatus) {
     let packet;
     try { packet = JSON.parse(raw); } catch { return; }
     if (!packet || packet.generation !== generation) return;
+    link.lastReceived = now;
     if (isHost()) {
       if (packet.type === 'pose' || packet.type === 'event') acceptPose(link.id, packet.pose, packet.seq);
       return;
@@ -105,7 +112,11 @@ export default function browserRoom(token, scene, onStatus) {
       if (p.sessionId !== sessionId) peers.push({ ...pose, id: member.id, username: member.username });
     }
     snapshotSeq = packet.seq; lastSnapshot = now; errorMessage = '';
-    worldAnchor = packet.worldSeconds; worldAt = now; worldReady = true;
+    // Smooth clock corrections so traffic does not jump with network jitter.
+    const predicted = worldSeconds();
+    worldAnchor = worldReady && Math.abs(predicted - packet.worldSeconds) < 2
+      ? predicted + (packet.worldSeconds - predicted) * 0.1 : packet.worldSeconds;
+    worldAt = now; worldReady = true;
     scene.setWorldClock(worldSeconds); scene.updatePeers(peers);
   }
   function attach(link, channel) {
@@ -117,7 +128,7 @@ export default function browserRoom(token, scene, onStatus) {
   function newLink(id, connection) {
     closeLink(id);
     const pc = new RTCPeerConnection({ iceServers });
-    const link = { id, connection, pc, created: performance.now(), seq: -1, received: 0, rateAt: performance.now() };
+    const link = { id, connection, pc, created: performance.now(), lastReceived: 0, received: 0, rateAt: performance.now() };
     links.set(id, link);
     pc.ondatachannel = e => attach(link, e.channel);
     return link;
@@ -127,9 +138,10 @@ export default function browserRoom(token, scene, onStatus) {
     if (pc.iceGatheringState === 'complete') return;
     await new Promise(resolve => {
       let timeout;
-      const finish = () => { clearTimeout(timeout); pc.removeEventListener('icegatheringstatechange', changed); pc.removeEventListener('connectionstatechange', changed); resolve(); };
+      const finish = () => { clearTimeout(timeout); link.cancelGather = null; pc.removeEventListener('icegatheringstatechange', changed); pc.removeEventListener('connectionstatechange', changed); resolve(); };
       const changed = () => { if (pc.iceGatheringState === 'complete' || pc.connectionState === 'closed') finish(); };
       timeout = setTimeout(finish, 7000);
+      link.cancelGather = finish;
       pc.addEventListener('icegatheringstatechange', changed);
       pc.addEventListener('connectionstatechange', changed);
     });
@@ -187,7 +199,6 @@ export default function browserRoom(token, scene, onStatus) {
       if (generation !== data.generation || host !== data.hostSession) {
         disconnect(); generation = data.generation; host = data.hostSession; snapshotSeq = -1;
         if (!worldReady) { worldAnchor = data.worldSeconds; worldAt = performance.now(); worldReady = true; }
-        if (isHost()) scene.setWorldClock(worldSeconds);
       }
       if (isHost()) scene.setWorldClock(worldSeconds);
       for (const id of [...links.keys()]) if (!roster.has(id) || (!isHost() && id !== host)) closeLink(id);
@@ -199,7 +210,8 @@ export default function browserRoom(token, scene, onStatus) {
         for (const id of roster.keys()) {
           if (id === sessionId) continue;
           const link = links.get(id);
-          const healthy = link?.movement?.readyState === 'open' && link?.events?.readyState === 'open';
+          const healthy = link?.movement?.readyState === 'open' && link?.events?.readyState === 'open' &&
+            link.lastReceived > 0 && performance.now() - link.lastReceived < 6000;
           if (!link || (!healthy && performance.now() - link.created > 20000)) {
             void describe(newLink(id, window.crypto.randomUUID()), 'offer');
           }
@@ -221,7 +233,7 @@ export default function browserRoom(token, scene, onStatus) {
   }
   function tick() {
     if (!active()) {
-      if (lastSync && performance.now() - lastSync >= 10000) { disconnect(); lastSync = 0; }
+      if (lastSync && performance.now() - lastSync >= 10000) { disconnect(); lastSync = 0; status(); }
       return;
     }
     const now = performance.now(), pose = scene.pose(), seq = ++packetSeq;
