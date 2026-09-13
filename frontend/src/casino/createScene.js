@@ -176,6 +176,16 @@ export default function createScene(host, events) {
       // exit, but can never move farther into the barrier.
       if (currentBarrierDepth <= 0 || nextBarrierDepth >= currentBarrierDepth) return false;
     }
+    // The highest riser is a solid wall when approached from the downstairs
+    // room beneath the upper landing. Include the player's full radius so the
+    // avatar cannot visibly enter its front face before its center is stopped.
+    const acrossTopRiser = x > s.minX - playerRadius && x < s.maxX + playerRadius;
+    const touchesTopRiser = acrossTopRiser && z > s.topZ - playerRadius && z <= s.topZ;
+    if (floor === 1 && !traversingStairs && touchesTopRiser) {
+      const currentlyTouching = pos.x > s.minX - playerRadius && pos.x < s.maxX + playerRadius &&
+        pos.z > s.topZ - playerRadius && pos.z <= s.topZ;
+      if (!currentlyTouching || z > pos.z) return false;
+    }
     if (traversingStairs && inStairRun(z) && !inStairLane(x)) return false;
     if (nextOnStairs && !traversingStairs) {
       const entersFromBottom = floor === 1 && inStairLane(pos.x) && pos.z >= s.bottomZ;
