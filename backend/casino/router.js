@@ -8,6 +8,7 @@ module.exports = function casinoRouter(authMiddleware) {
   const router = express.Router();
   router.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
   router.get('/world', (req, res) => res.json(world));
+  router.use('/browser-room', require('./browserRoom')(authMiddleware));
   router.put('/presence', authMiddleware, async (req, res) => {
     const { x, z, yaw, seatId = null } = req.body;
     const faceSeed = req.body.faceSeed ?? 0;
@@ -51,7 +52,7 @@ module.exports = function casinoRouter(authMiddleware) {
       res.json({ roomId: world.id, players: peers.rows, capacity: world.capacity });
     } catch (error) {
       if (client) await client.query('ROLLBACK').catch(() => {});
-      if (error.code === '23505') return res.status(409).json({ error: 'That seat is occupied.' });
+      if (error.code === '23505') return res.status(409).json({ code: 'SEAT_OCCUPIED', error: 'That seat is occupied.' });
       res.status(503).json({ error: 'Shared room unavailable. You can keep exploring solo.' });
     } finally { if (client) client.release(); }
   });

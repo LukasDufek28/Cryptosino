@@ -31,6 +31,8 @@ export default function createScene(host, events) {
   sun.shadow.camera.updateProjectionMatrix();
   sun.shadow.normalBias = 0.03; scene.add(sun);
   const world = buildWorld(scene);
+  const carStarts = world.cars.map(c => c.group.position.x);
+  let worldClock = null, localWorldSeconds = 0, poseRevision = 0;
   const self = avatar(scene, '', '#769b87', visitFaceSeed);
   self.name.visible = false;
   self.group.traverse(object => object.layers.set(1));
@@ -41,6 +43,7 @@ export default function createScene(host, events) {
   const gravity = 18, jumpSpeed = 5.5;
   let enabled = true, disposed = false, last = 0, uiAt = 0, nearest = null;
   let dragging = false, lastX = 0, lastY = 0, moved = false;
+  let dragPointer = null, skipLockedMove = true;
   const keys = new Set();
   const direction = new THREE.Vector3();
   const focus = new THREE.Vector3();
@@ -60,11 +63,13 @@ export default function createScene(host, events) {
   function stand() {
     if (!seat) return;
     pos.set(seat.exitX, layout.upperFloor, seat.exitZ); seat = null;
+    poseRevision += 1;
     events.onSeat(null);
   }
   function jump() {
     if (!enabled || seat || jumpHeight > 0 || jumpVelocity > 0) return;
     jumpVelocity = jumpSpeed;
+    poseRevision += 1;
   }
   function interact() {
     if (!enabled) return;
@@ -74,10 +79,12 @@ export default function createScene(host, events) {
     if (nearest.kind === 'face') {
       visitFaceSeed = (visitFaceSeed + 1 + Math.floor(Math.random() * 2147483646)) % 2147483647;
       self.setFace(visitFaceSeed);
+      poseRevision += 1;
       return;
     }
     if (nearest.kind === 'seat') {
       seat = nearest.item; pos.set(seat.x, layout.upperFloor, seat.z); yaw = seat.yaw; pitch = -0.03;
+      poseRevision += 1;
       events.onSeat(seat.id);
     } else {
       keys.clear(); unlock(); events.onGame(nearest.item.game);
@@ -87,6 +94,7 @@ export default function createScene(host, events) {
     stand(); clearInput(); jumpHeight = 0; jumpVelocity = 0;
     pos.set(layout.spawn.x, layout.spawn.y, layout.spawn.z);
     floor = 2; yaw = layout.spawn.yaw; pitch = -0.05;
+    poseRevision += 1;
     camera.position.set(pos.x, pos.y + 1.65, pos.z);
     nearest = null;
   }
@@ -106,18 +114,33 @@ export default function createScene(host, events) {
     if (e.code === 'KeyE' && !e.repeat) interact();
   }
   function keyUp(e) { keys.delete(e.code); }
-  function clearInput() { keys.clear(); dragging = false; touch.x = 0; touch.y = 0; }
-  function pointerDown(e) { if (!enabled || e.button !== 0 || document.pointerLockElement === canvas) return; dragging = true; lastX = e.clientX; lastY = e.clientY; moved = false; canvas.setPointerCapture(e.pointerId); }
+  function clearInput() {
+    keys.clear(); dragging = false; touch.x = 0; touch.y = 0;
+    if (dragPointer !== null && canvas.hasPointerCapture(dragPointer)) canvas.releasePointerCapture(dragPointer);
+    dragPointer = null;
+  }
+  function lockChanged() { clearInput(); skipLockedMove = true; }
+  function visibilityChanged() { if (document.hidden) clearInput(); skipLockedMove = true; }
+  function pointerDown(e) { if (!enabled || !e.isPrimary || e.button !== 0 || document.pointerLockElement === canvas) return; dragging = true; dragPointer = e.pointerId; lastX = e.clientX; lastY = e.clientY; moved = false; canvas.setPointerCapture(e.pointerId); }
   function pointerMove(e) {
-    if (!enabled) return;
-    if (document.pointerLockElement === canvas) look(e.movementX, e.movementY);
-    else if (dragging) {
+    if (!enabled || document.hidden) return;
+    if (document.pointerLockElement === canvas) {
+      if (skipLockedMove) { skipLockedMove = false; return; }
+      look(e.movementX, e.movementY);
+    }
+    else if (dragging && e.pointerId === dragPointer) {
       const dx = e.clientX - lastX, dy = e.clientY - lastY;
       if (Math.abs(dx) + Math.abs(dy) > 2) moved = true;
       look(dx, dy); lastX = e.clientX; lastY = e.clientY;
     }
   }
-  function pointerUp(e) { dragging = false; if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId); if (!moved && e.pointerType !== 'touch') lock(); }
+  function pointerUp(e) {
+    if (e.pointerId !== dragPointer) return;
+    dragging = false; dragPointer = null;
+    if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+    if (!moved && e.pointerType !== 'touch') lock();
+  }
+  function captureLost(e) { if (e.pointerId === dragPointer) { dragging = false; dragPointer = null; } }
   function canMove(x, z) {
     if (Math.abs(x) > 45 || z > 32 || z < -9.4) return false;
     const s = layout.stairs;
@@ -173,6 +196,9 @@ export default function createScene(host, events) {
   document.addEventListener('keydown', keyDown);
   document.addEventListener('keyup', keyUp);
   window.addEventListener('blur', clearInput);
+  document.addEventListener('pointerlockchange', lockChanged);
+  document.addEventListener('visibilitychange', visibilityChanged);
+  canvas.addEventListener('lostpointercapture', captureLost);
   canvas.addEventListener('pointerdown', pointerDown);
   document.addEventListener('pointermove', pointerMove);
   canvas.addEventListener('pointerup', pointerUp);
@@ -208,10 +234,14 @@ export default function createScene(host, events) {
       self.group.position.set(pos.x, pos.y + jumpHeight - (seat ? 0.4 : 0), pos.z);
       self.group.rotation.y = yaw;
       world.mirror.visible = floor === 1;
-      world.cars.forEach(c => { c.group.position.x += dt * c.direction * c.speed; if (c.group.position.x > 64) c.group.position.x = -64; if (c.group.position.x < -64) c.group.position.x = 64; });
+      localWorldSeconds = worldClock ? worldClock() : localWorldSeconds + dt;
+      world.cars.forEach((c, i) => {
+        const distance = carStarts[i] + localWorldSeconds * c.direction * c.speed;
+        c.group.position.x = ((distance + 64) % 128 + 128) % 128 - 64;
+      });
       peers.forEach(p => {
-        p.group.position.lerp(p.target, 1 - Math.exp(-dt * 7));
-        p.group.rotation.y += Math.atan2(Math.sin(p.yaw - p.group.rotation.y), Math.cos(p.yaw - p.group.rotation.y)) * Math.min(dt * 8, 1);
+        p.group.position.lerp(p.target, 1 - Math.exp(-dt * 25));
+        p.group.rotation.y += Math.atan2(Math.sin(p.yaw - p.group.rotation.y), Math.cos(p.yaw - p.group.rotation.y)) * (1 - Math.exp(-dt * 25));
         p.name.quaternion.copy(camera.quaternion).premultiply(p.group.quaternion.clone().invert());
       });
       if (now - uiAt > 150) { updateNearest(); uiAt = now; }
@@ -229,8 +259,12 @@ export default function createScene(host, events) {
     setEnabled(value) { enabled = value; if (!value) { clearInput(); unlock(); } },
     move(x, y) { touch.x = x; touch.y = y; },
     home,
-    pose() { return { x: pos.x, z: pos.z, yaw, floor, seatId: seat?.id || null, faceSeed: visitFaceSeed }; },
+    pose() { return { x: pos.x, z: pos.z, yaw, floor, jumpHeight, revision: poseRevision, seatId: seat?.id || null, faceSeed: visitFaceSeed }; },
+    peerCount() { return peers.size; },
+    setWorldClock(clock) { if (!disposed) worldClock = clock; },
+    rejectSeat(id, revision) { if (!disposed && seat?.id === id && poseRevision === revision) stand(); },
     updatePeers(players) {
+      if (disposed) return;
       const live = new Set(players.map(p => p.id));
       for (const [id, peer] of peers) if (!live.has(id)) { scene.remove(peer.group); disposeObject(peer.group); peers.delete(id); }
       players.forEach(p => {
@@ -247,6 +281,9 @@ export default function createScene(host, events) {
       world.mirror.getRenderTarget().dispose();
       document.removeEventListener('keydown', keyDown); document.removeEventListener('keyup', keyUp);
       document.removeEventListener('pointermove', pointerMove); window.removeEventListener('blur', clearInput);
+      document.removeEventListener('pointerlockchange', lockChanged);
+      document.removeEventListener('visibilitychange', visibilityChanged);
+      canvas.removeEventListener('lostpointercapture', captureLost);
       canvas.removeEventListener('pointerdown', pointerDown); canvas.removeEventListener('pointerup', pointerUp);
       canvas.removeEventListener('pointercancel', clearInput); canvas.removeEventListener('webglcontextlost', contextLost);
       const geometries = new Set(), mats = new Set(), textures = new Set();

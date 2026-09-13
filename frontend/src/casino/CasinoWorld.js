@@ -102,7 +102,7 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
           : <button className="amber-pill" onClick={() => { setWelcome(false); setPanel('auth'); }}>Sign in <span>↗</span></button>}
       </nav>
     </header>
-    <div className="amber-location"><span className="amber-live-dot"/><span>{presence.mode === 'shared' ? `${presence.count} guests in the house` : 'Your evening, your pace'}</span><span className="amber-location-divider">/</span><span>GOLDEN HOUR</span></div>
+    <div className="amber-location"><span className="amber-live-dot"/><span>{presence.mode === 'shared' ? `${presence.count} guests · ${presence.role === 'host' ? 'You are hosting' : 'Browser hosted'} · 30 ms send interval` : 'Your evening, your pace'}</span><span className="amber-location-divider">/</span><span>GOLDEN HOUR</span></div>
 
     {welcome && !error && <section className="amber-welcome">
       <div className="amber-eyebrow"><span/> EST. 2026 · AN EVENING WELL SPENT</div>
