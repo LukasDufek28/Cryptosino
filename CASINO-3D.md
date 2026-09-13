@@ -88,8 +88,10 @@ Re-run this additive migration for browser hosting: it creates three
 per-member client version used for patch comparisons. Use the same
 database as the deployment. Builds and server startup never run migrations.
 
-The oldest active browser automatically hosts the room. Guests connect to the
-host in a star topology. Movement snapshots target one send every 30ms (~33Hz),
+The oldest active browser on the newest reported patch automatically hosts the
+room. A newer patch joining or the last newest-patch client leaving triggers a
+new host generation. Guests connect to the host in a star topology. Movement
+snapshots target one send every 30ms (~33Hz),
 using unordered, non-retransmitted packets with sequence checks and bounded
 send buffers. Discrete seat/stand, face, reset, and jump changes also use an
 ordered reliable channel. The host arbitrates occupied seats and shares the

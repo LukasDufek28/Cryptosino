@@ -4,6 +4,15 @@ const { getClient, query } = require('../db');
 const world = require('../../frontend/src/casino/worldLayout.json');
 const casinoVersion = require('../../frontend/src/casino/version.json');
 const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
+const versionParts = value => /^\d+\.\d+\.\d+$/.test(value || '') ? value.split('.').map(BigInt) : [-1n, -1n, -1n];
+function compareVersions(a, b) {
+  const left = versionParts(a), right = versionParts(b);
+  for (let i = 0; i < 3; i++) {
+    if (left[i] > right[i]) return 1;
+    if (left[i] < right[i]) return -1;
+  }
+  return 0;
+}
 
 function iceConfig(userId) {
   const iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
@@ -21,7 +30,7 @@ module.exports = function browserRoom(authMiddleware) {
   router.use(authMiddleware);
   router.post('/sync', async (req, res) => {
     const { sessionId, generation = 0, ack = '0', signals = [], version } = req.body || {};
-    const clientVersion = typeof version === 'string' && /^\d+\.\d+\.\d+$/.test(version) ? version : 'legacy';
+    const clientVersion = typeof version === 'string' && version.length <= 32 && /^\d+\.\d+\.\d+$/.test(version) ? version : 'legacy';
     if (!uuid(sessionId) || !Number.isInteger(generation) || generation < 0 ||
         !/^\d{1,18}$/.test(String(ack)) || !Array.isArray(signals) || signals.length > 12 ||
         signals.some(s => !s || !uuid(s.to) || !uuid(s.id) || !uuid(s.connection) ||
@@ -52,8 +61,12 @@ module.exports = function browserRoom(authMiddleware) {
         ON CONFLICT(session_id) DO UPDATE SET updated_at=NOW(),client_version=EXCLUDED.client_version`, [sessionId, world.id, req.user.id, clientVersion]);
       const roster = (await client.query(`SELECT m.session_id AS "sessionId",m.client_version AS version,u.id,u.username,u.balance FROM casino_browser_members m
         JOIN users u ON u.id=m.user_id WHERE m.room_id=$1 ORDER BY m.joined_at,m.session_id`, [world.id])).rows;
-      if (!roster.some(m => m.sessionId === room.host_session)) {
-        room.host_session = roster[0].sessionId;
+      // Prefer the newest client patch. The roster is ordered by join time, so
+      // equal-version rooms keep their oldest active member as the stable host.
+      const preferredHost = roster.reduce((best, member) =>
+        compareVersions(member.version, best.version) > 0 ? member : best, roster[0]);
+      if (room.host_session !== preferredHost.sessionId) {
+        room.host_session = preferredHost.sessionId;
         room.generation += 1;
         await client.query('UPDATE casino_browser_rooms SET host_session=$2,generation=$3 WHERE room_id=$1', [world.id, room.host_session, room.generation]);
         await client.query('DELETE FROM casino_browser_signals WHERE room_id=$1', [world.id]);
