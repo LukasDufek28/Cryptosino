@@ -5,7 +5,7 @@
   "capacity": 24,
   "upperFloor": 4.6,
   "spawn": { "x": 1, "y": 4.6, "z": 5.1, "yaw": 0.22 },
-  "stairs": { "minX": -13.3, "maxX": -9.6, "walkMinX": -13.0, "walkMaxX": -9.9, "bottomZ": 7.5, "topZ": -3.5 },
+  "stairs": { "minX": -13.3, "maxX": -9.6, "walkMinX": -12.85, "walkMaxX": -10.05, "bottomZ": 7.5, "topZ": -3.5 },
   "stations": [
     { "id": "slots", "name": "Golden reels", "game": "slots", "x": -6.4, "z": -7.3, "color": "#dcb36f", "description": "A little luck. A little gold." },
     { "id": "blackjack", "name": "The twenty-one club", "game": "blackjack", "x": -0.4, "z": -5.5, "color": "#71a796", "description": "Take a seat at the green felt." },

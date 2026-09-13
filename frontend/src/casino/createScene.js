@@ -42,6 +42,7 @@ export default function createScene(host, events) {
   let wasOnStairs = false;
   let jumpHeight = 0, jumpVelocity = 0;
   const gravity = 18, jumpSpeed = 5.5;
+  const playerRadius = 0.45;
   let enabled = true, disposed = false, last = 0, uiAt = 0, nearest = null;
   let dragging = false, lastX = 0, lastY = 0, moved = false;
   let dragPointer = null, skipLockedMove = true;
@@ -156,6 +157,14 @@ export default function createScene(host, events) {
     // The rails are solid along the whole flight. A player can enter only from
     // the landing that belongs to their current floor, never from the side or
     // from the small ground-floor space beneath the upper landing.
+    if (inStairRun(z) && !nextOnStairs) {
+      const besideRight = x >= s.maxX && x < s.maxX + playerRadius;
+      const besideLeft = x <= s.minX && x > s.minX - playerRadius;
+      const alreadyBesideRight = inStairRun(pos.z) && pos.x >= s.maxX && pos.x < s.maxX + playerRadius;
+      const alreadyBesideLeft = inStairRun(pos.z) && pos.x <= s.minX && pos.x > s.minX - playerRadius;
+      if (besideRight && (!alreadyBesideRight || x < pos.x)) return false;
+      if (besideLeft && (!alreadyBesideLeft || x > pos.x)) return false;
+    }
     if (onStairs && inStairRun(z) && !inStairLane(x)) return false;
     if (nextOnStairs && !onStairs) {
       if (!inStairLane(pos.x)) return false;
