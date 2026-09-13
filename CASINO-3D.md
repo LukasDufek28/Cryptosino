@@ -71,6 +71,8 @@ New clients use `browserRoom.js` on frontend/backend: PostgreSQL handles only
 authenticated discovery, host election, leases, and WebRTC SDP exchange.
 `usePresence.js` owns the transport lifecycle. Room names and balances in the Tab
 list come from authenticated backend responses, never untrusted peer packets.
+`frontend/src/casino/version.json` is the single casino patch version. Bump it
+with each shipped patch; the HUD and HTTP room roster use the same value.
 
 ## Browser-hosted rooms
 
@@ -82,7 +84,8 @@ npm.cmd run migrate:casino --workspace=backend
 ```
 
 Re-run this additive migration for browser hosting: it creates three
-`casino_browser_*` tables as well as the earlier presence schema. Use the same
+`casino_browser_*` tables as well as the earlier presence schema, and adds the
+per-member client version used for patch comparisons. Use the same
 database as the deployment. Builds and server startup never run migrations.
 
 The oldest active browser automatically hosts the room. Guests connect to the

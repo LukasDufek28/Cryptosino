@@ -28,10 +28,13 @@ CREATE TABLE IF NOT EXISTS casino_browser_members (
   session_id UUID PRIMARY KEY,
   room_id TEXT NOT NULL REFERENCES casino_browser_rooms(room_id) ON DELETE CASCADE,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  client_version TEXT NOT NULL DEFAULT 'unknown',
   joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE(room_id, user_id)
 );
+-- Safe to re-run when patch reporting is added to an existing browser room.
+ALTER TABLE casino_browser_members ADD COLUMN IF NOT EXISTS client_version TEXT NOT NULL DEFAULT 'unknown';
 CREATE TABLE IF NOT EXISTS casino_browser_signals (
   id BIGSERIAL PRIMARY KEY,
   room_id TEXT NOT NULL REFERENCES casino_browser_rooms(room_id) ON DELETE CASCADE,

@@ -1,4 +1,5 @@
 import layout from './worldLayout.json';
+import casinoVersion from './version.json';
 
 const API = process.env.REACT_APP_API_URL || '';
 const TICK_MS = 30;
@@ -40,7 +41,7 @@ export default function browserRoom(token, scene, onStatus) {
     const state = { mode: connected ? 'shared' : 'solo', count: Math.max(1, count),
       role: connected ? isHost() ? 'host' : 'guest' : 'connecting', message,
       players: active() ? [...roster.values()].map(member => ({
-        id: member.id, username: member.username, balance: member.balance,
+        id: member.id, username: member.username, balance: member.balance, version: member.version || 'legacy',
         isSelf: member.sessionId === sessionId, isHost: member.sessionId === host
       })) : [] };
     const key = JSON.stringify(state);
@@ -188,7 +189,7 @@ export default function browserRoom(token, scene, onStatus) {
     try {
       const response = await fetch(`${API}/api/casino/browser-room/sync`, { method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ sessionId, generation, ack, signals: batch }), signal: controller.signal });
+        body: JSON.stringify({ sessionId, generation, ack, signals: batch, version: casinoVersion.version }), signal: controller.signal });
       const data = await response.json();
       if (stopped) return;
       if (!response.ok) throw new Error(data.error || 'Room setup unavailable.');

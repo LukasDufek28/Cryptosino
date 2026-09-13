@@ -2,6 +2,7 @@ const express = require('express');
 const { createHmac } = require('node:crypto');
 const { getClient, query } = require('../db');
 const world = require('../../frontend/src/casino/worldLayout.json');
+const casinoVersion = require('../../frontend/src/casino/version.json');
 const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 
 function iceConfig(userId) {
@@ -19,7 +20,8 @@ module.exports = function browserRoom(authMiddleware) {
   const router = express.Router();
   router.use(authMiddleware);
   router.post('/sync', async (req, res) => {
-    const { sessionId, generation = 0, ack = '0', signals = [] } = req.body || {};
+    const { sessionId, generation = 0, ack = '0', signals = [], version } = req.body || {};
+    const clientVersion = typeof version === 'string' && /^\d+\.\d+\.\d+$/.test(version) ? version : 'legacy';
     if (!uuid(sessionId) || !Number.isInteger(generation) || generation < 0 ||
         !/^\d{1,18}$/.test(String(ack)) || !Array.isArray(signals) || signals.length > 12 ||
         signals.some(s => !s || !uuid(s.to) || !uuid(s.id) || !uuid(s.connection) ||
@@ -46,9 +48,9 @@ module.exports = function browserRoom(authMiddleware) {
       if (existing && Date.now() - new Date(existing.updated_at).getTime() < 350) {
         await client.query('ROLLBACK'); return res.status(429).json({ error: 'Room setup is updating too quickly.' });
       }
-      await client.query(`INSERT INTO casino_browser_members(session_id,room_id,user_id) VALUES($1,$2,$3)
-        ON CONFLICT(session_id) DO UPDATE SET updated_at=NOW()`, [sessionId, world.id, req.user.id]);
-      const roster = (await client.query(`SELECT m.session_id AS "sessionId",u.id,u.username,u.balance FROM casino_browser_members m
+      await client.query(`INSERT INTO casino_browser_members(session_id,room_id,user_id,client_version) VALUES($1,$2,$3,$4)
+        ON CONFLICT(session_id) DO UPDATE SET updated_at=NOW(),client_version=EXCLUDED.client_version`, [sessionId, world.id, req.user.id, clientVersion]);
+      const roster = (await client.query(`SELECT m.session_id AS "sessionId",m.client_version AS version,u.id,u.username,u.balance FROM casino_browser_members m
         JOIN users u ON u.id=m.user_id WHERE m.room_id=$1 ORDER BY m.joined_at,m.session_id`, [world.id])).rows;
       if (!roster.some(m => m.sessionId === room.host_session)) {
         room.host_session = roster[0].sessionId;
@@ -75,7 +77,7 @@ module.exports = function browserRoom(authMiddleware) {
         WHERE recipient=$1 AND generation=$2 ORDER BY id LIMIT 96`, [sessionId, room.generation])).rows;
       const now = (await client.query('SELECT clock_timestamp() AS now')).rows[0].now;
       await client.query('COMMIT');
-      res.json({ sessionId, selfId: req.user.id, hostSession: room.host_session, generation: room.generation,
+      res.json({ sessionId, selfId: req.user.id, hostSession: room.host_session, generation: room.generation, serverVersion: casinoVersion.version,
         roster, signals: inbox, worldSeconds: (new Date(now) - new Date(room.started_at)) / 1000, ...iceConfig(req.user.id) });
     } catch (error) {
       if (client) await client.query('ROLLBACK').catch(() => {});

@@ -6,6 +6,7 @@ import usePresence from './usePresence';
 import PlayerList from './PlayerList';
 import useLeaderboard from './useLeaderboard';
 import layout from './worldLayout.json';
+import casinoVersion from './version.json';
 import './CasinoWorld.css';
 
 const games = {
@@ -72,12 +73,14 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
   const [status, setStatus] = useState({ floor: 2, x: layout.spawn.x, z: layout.spawn.z, yaw: layout.spawn.yaw, prompt: '', locked: false });
   const [activeGame, setActiveGame] = useState(null);
   const [showMap, setShowMap] = useState(true);
+  const [receptionMessage, setReceptionMessage] = useState('');
   const openGameRef = useRef(null);
   const resetBalanceRef = useRef(null);
   const resetBusyRef = useRef(false);
   openGameRef.current = game => { setActiveGame(game); setPanel(token && user ? 'game' : 'auth'); };
   resetBalanceRef.current = async () => {
     if (!token) { setActiveGame(null); setPanel('auth'); return; }
+    if (Number(balance) >= 1000) return;
     if (resetBusyRef.current) return;
     resetBusyRef.current = true;
     try {
@@ -85,10 +88,16 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
         method: 'POST', headers: { Authorization: `Bearer ${token}` }
       });
       const data = await response.json();
-      if (response.ok) setBalance(Number(data.balance));
-      else alert(data.error || 'Reset failed');
+      if (response.ok) {
+        setBalance(Number(data.balance));
+        setReceptionMessage('The receptionist restored your balance to $1,000.');
+      } else if (response.status === 400) {
+        setReceptionMessage('');
+      } else {
+        setReceptionMessage(data.error || 'The receptionist is unavailable right now.');
+      }
     } catch {
-      alert('Network error');
+      setReceptionMessage('The receptionist cannot reach the casino server right now.');
     } finally {
       resetBusyRef.current = false;
     }
@@ -117,7 +126,7 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
     <div className="amber-canvas" ref={host} />
     <div className="amber-vignette" />
     <header className="amber-topbar">
-      <div className="amber-brand"><span className="amber-brand-mark">A<span>H</span></span><div><strong>THE AMBER HOUSE</strong><small>A CRYPTOSINO ADDRESS</small></div></div>
+      <div className="amber-brand"><span className="amber-brand-mark">A<span>H</span></span><div><strong>THE AMBER HOUSE</strong><small>A CRYPTOSINO ADDRESS · PATCH {casinoVersion.version}</small></div></div>
       <nav aria-label="Casino navigation">
         <button className="amber-nav-button" onClick={openDirectory}>The collection <span>↗</span></button>
         <button className="amber-icon-button" onClick={() => setShowMap(v => !v)} aria-label="Toggle floor map" aria-pressed={showMap}>⌖</button>
@@ -152,6 +161,7 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
     </footer>
     {showMap && !panel && <MiniMap status={status} />}
     {presence.message && <div className="amber-presence-note" role="status">{presence.message}</div>}
+    {receptionMessage && <div className="amber-reception-note" role="status">{receptionMessage}<button aria-label="Dismiss receptionist message" onClick={() => setReceptionMessage('')}>×</button></div>}
     <PlayerList enabled={!welcome && !panel && !error} presence={presence} user={user} balance={balance} sceneRef={sceneRef} />
     {error && <div className="amber-error" role="alert"><h2>A moment, please.</h2><p>{error}</p><button className="amber-pill" onClick={() => window.location.reload()}>Reload</button> <Link to="/lobby">Open classic casino</Link></div>}
 

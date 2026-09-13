@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import casinoVersion from './version.json';
 
 const money = value => Number.isFinite(Number(value)) ? `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
 
@@ -25,20 +26,20 @@ export default function PlayerList({ enabled, presence, user, balance, sceneRef 
     };
   }, [enabled, sceneRef]);
   if (!enabled) return null;
-  const players = presence.players?.length ? presence.players : user ? [{ id: user.id, username: user.username, balance, isSelf: true, isHost: false }] : [];
+  const players = presence.players?.length ? presence.players : user ? [{ id: user.id, username: user.username, balance, version: casinoVersion.version, isSelf: true, isHost: false }] : [];
   return <>
     <button className="amber-roster-toggle" aria-expanded={held || pinned} aria-controls="amber-player-list" onClick={() => setPinned(value => !value)}><kbd>TAB</kbd> Players</button>
     {(held || pinned) && <section id="amber-player-list" className="amber-roster" aria-label="Players in the house">
-      <header><div><span className="amber-eyebrow">THE AMBER HOUSE / LIVE ROOM</span><h2>Good company.</h2></div><span>{players.length} / 24 GUESTS</span></header>
+      <header><div><span className="amber-eyebrow">THE AMBER HOUSE / LIVE ROOM / PATCH {casinoVersion.version}</span><h2>Good company.</h2></div><span>{players.length} / 24 GUESTS</span></header>
       <div className="amber-roster-scroll"><table>
-        <thead><tr><th>Player</th><th>Balance</th><th>Room role</th></tr></thead>
+        <thead><tr><th>Player</th><th>Balance</th><th>Patch</th><th>Room role</th></tr></thead>
         <tbody>{players.map(player => <tr key={player.id} className={player.isSelf ? 'amber-roster-self' : ''}>
           <td><span className="amber-roster-avatar" aria-hidden="true">{player.username?.slice(0, 1).toUpperCase()}</span>{player.username}{player.isSelf && <small>YOU</small>}</td>
-          <td>{money(player.balance)}</td><td>{player.isHost ? <span className="amber-host-badge">HOST</span> : 'Guest'}</td>
+          <td>{money(player.balance)}</td><td><span className={player.version === casinoVersion.version ? 'amber-patch-match' : 'amber-patch-mismatch'}>{player.version || 'legacy'}</span></td><td>{player.isHost ? <span className="amber-host-badge">HOST</span> : 'Guest'}</td>
         </tr>)}</tbody>
       </table></div>
       {!players.length && <p>Sign in to join the browser-hosted room.</p>}
-      <footer><span>Balances come from the casino server · refresh about every 3 seconds</span><span>Release TAB to close</span></footer>
+      <footer><span>Patch versions come from the server roster even if WebRTC cannot connect</span><span>Release TAB to close</span></footer>
     </section>}
   </>;
 }

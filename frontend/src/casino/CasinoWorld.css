@@ -53,6 +53,8 @@
 .amber-seated { position: absolute; bottom: 173px; left: 50%; transform: translateX(-50%); font: italic 19px Georgia, serif; color: #f8e6bf; white-space: nowrap; text-shadow: 0 2px 6px #444b38; }
 .amber-resume { position: absolute; bottom: 75px; left: 50%; transform: translateX(-50%); border: 0; background: #26372eaa; color: #f4e3c3; border-radius: 20px; padding: 8px 16px; font-size: 9px !important; }
 .amber-presence-note { position: absolute; bottom: 62px; left: 40px; font-size: 9px; color: #eadabe; }
+.amber-reception-note { position: absolute; left: 50%; bottom: 155px; transform: translateX(-50%); display: flex; align-items: center; gap: 13px; padding: 10px 14px; border: 1px solid #d5bc8866; border-radius: 6px; background: #263d32e8; color: #f0dfbf; font-size: 10px; }
+.amber-reception-note button { border: 0; background: transparent; color: #dec796; font-size: 17px !important; padding: 0; }
 .amber-modal-shade { position: absolute; inset: 0; z-index: 10; background: #15281fc4; backdrop-filter: blur(12px); display: grid; place-items: center; padding: 28px; }
 .amber-modal { max-height: calc(100dvh - 56px); width: min(580px, 100%); overflow: auto; background: #233d33; border: 1px solid #c3a67666; border-radius: 15px; box-shadow: 0 30px 100px #0005; outline: none; }
 .amber-modal-large { width: min(1080px, 100%); }
@@ -92,11 +94,15 @@
 .amber-roster th { text-transform: uppercase; font-size: 9px; letter-spacing: .15em; color: #b6c6b9; background: #10251f; text-align: left; padding: 13px 24px; }
 .amber-roster td { padding: 14px 24px; border-bottom: 1px solid #e4cf9f18; color: #eddfc4; }
 .amber-roster th:nth-child(2), .amber-roster td:nth-child(2) { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.amber-roster th:nth-child(3), .amber-roster td:nth-child(3) { text-align: center; white-space: nowrap; }
 .amber-roster td:first-child { overflow-wrap: anywhere; }
 .amber-roster-self { background: #55775b44; box-shadow: inset 3px 0 #b9d09b; }
 .amber-roster td small { font-size: 8px; margin-left: 9px; color: #c6d8b0; }
 .amber-roster-avatar { display: inline-grid; place-items: center; width: 28px; height: 28px; margin-right: 13px; background: #84987844; color: #e1c78e; border: 1px solid #adba9866; }
 .amber-host-badge { font-size: 9px; letter-spacing: .1em; color: #1f3329; background: #e4c991; padding: 5px 9px; border-radius: 2px; }
+.amber-patch-match, .amber-patch-mismatch { display: inline-block; min-width: 48px; padding: 4px 7px; border-radius: 3px; font: 9px monospace; }
+.amber-patch-match { color: #cce0bb; background: #6d8e6844; }
+.amber-patch-mismatch { color: #ffd2a3; background: #b6634944; border: 1px solid #d9886566; }
 .amber-roster > footer { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; padding: 16px 24px; color: #b8c6b6; font-size: 9px; }
 .amber-roster > p { padding: 12px 24px; font-size: 13px; }
 @media (max-width: 600px) {
