@@ -4,6 +4,7 @@ import AuthPage from '../AuthPage';
 import createScene from './createScene';
 import usePresence from './usePresence';
 import PlayerList from './PlayerList';
+import useLeaderboard from './useLeaderboard';
 import layout from './worldLayout.json';
 import './CasinoWorld.css';
 
@@ -83,6 +84,7 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
     return () => { instance?.dispose(); sceneRef.current = null; };
   }, []);
   const presence = usePresence(token, sceneRef, ready);
+  useLeaderboard(sceneRef, ready);
   // Signing out also closes any retained authenticated game screen.
   useEffect(() => { if (!token) setPanel(current => current === 'game' ? null : current); }, [token]);
   useEffect(() => { sceneRef.current?.setEnabled(!welcome && !panel && !error); }, [welcome, panel, error, ready]);

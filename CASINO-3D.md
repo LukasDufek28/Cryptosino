@@ -48,6 +48,14 @@ stable while walking or signing in, and other guests receive the same face seed.
 The mirror works without an account, uses a 512px reflection texture, and is
 disabled upstairs to avoid an unnecessary extra scene render.
 
+The ground-floor right wall when entering from the street holds the brass-framed
+House Leaderboard. It ranks the top 10 accounts by current casino balance, with
+ties ordered by account ID. Names/balances come from the database via the public
+`/api/casino/leaderboard` endpoint, not the browser host. It refreshes every 30s
+while the page is visible and labels cached results if a refresh fails. Guests
+can read the board too. Street shop labels are mounted above shop entrances on
+brass backplates, with an awning below and upper windows above the sign band.
+
 ## Code architecture
 
 `frontend/src/casino/worldLayout.json` is the shared room manifest, consumed by

@@ -8,6 +8,12 @@ module.exports = function casinoRouter(authMiddleware) {
   const router = express.Router();
   router.use((req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
   router.get('/world', (req, res) => res.json(world));
+  router.get('/leaderboard', async (req, res) => {
+    try {
+      const { rows } = await query('SELECT username, balance FROM users ORDER BY balance DESC, id ASC LIMIT 10');
+      res.json({ leaders: rows });
+    } catch { res.status(503).json({ error: 'Leaderboard unavailable.' }); }
+  });
   router.use('/browser-room', require('./browserRoom')(authMiddleware));
   router.put('/presence', authMiddleware, async (req, res) => {
     const { x, z, yaw, seatId = null } = req.body;

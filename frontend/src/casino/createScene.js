@@ -261,6 +261,7 @@ export default function createScene(host, events) {
     home,
     pose() { return { x: pos.x, z: pos.z, yaw, floor, jumpHeight, revision: poseRevision, seatId: seat?.id || null, faceSeed: visitFaceSeed }; },
     peerCount() { return peers.size; },
+    updateLeaderboard(data) { if (!disposed) world.leaderboard.update(data); },
     setWorldClock(clock) { if (!disposed) worldClock = clock; },
     rejectSeat(id, revision) { if (!disposed && seat?.id === id && poseRevision === revision) stand(); },
     updatePeers(players) {

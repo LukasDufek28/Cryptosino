@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { Reflector } from 'three/examples/jsm/objects/Reflector.js';
 import layout from './worldLayout.json';
+import leaderboardBoard from './leaderboardBoard';
 import { box, cylinder, group, mesh, sign, plant, couch, floorLamp, pendant, slotMachine, gameTable, car } from './models';
 
 export default function buildWorld(scene) {
@@ -21,11 +22,24 @@ export default function buildWorld(scene) {
     const g = group(scene, x, 0, 39);
     box(g, [10, h, 9], facades[i % facades.length], [0, h / 2, 0]);
     box(g, [10.5, 0.3, 9.6], '#786c60', [0, h + 0.1, 0]);
-    for (let wx = -3; wx <= 3; wx += 3) for (let wy = 2; wy < h - 0.6; wy += 2.7) {
+    for (let wx = -3; wx <= 3; wx += 3) for (let wy = 5.4; wy < h - 0.6; wy += 2.7) {
       box(g, [1.4, 1.8, 0.08], '#4e6764', [wx, wy, -4.56]);
       box(g, [1.65, 0.12, 0.3], '#efd4ac', [wx, wy - 0.95, -4.66]);
     }
-    sign(g, ['CAFÉ MIEL', 'RECORDS', 'FLOWERS'][i % 3], 6, [0, 1.7, -4.65], { background: '#5b6857', serif: true }).rotation.y = Math.PI;
+    // Real shopfronts leave a dedicated sign band above the doors and awning.
+    [-2.9, 2.9].forEach(wx => {
+      box(g, [2.5, 2.5, 0.08], '#e1c59d', [wx, 1.5, -4.55]);
+      box(g, [2.25, 2.25, 0.06], '#56736c', [wx, 1.5, -4.62]);
+    });
+    box(g, [1.5, 2.5, 0.1], '#344e45', [0, 1.25, -4.57]);
+    box(g, [0.09, 0.3, 0.08], '#d4b174', [0.5, 1.2, -4.66]);
+    box(g, [6.8, 0.15, 1.2], '#4e6551', [0, 2.78, -4.95]);
+    box(g, [6.4, 1.76, 0.16], '#b39564', [0, 3.76, -4.59]);
+    sign(g, ['CAFÉ MIEL', 'RECORDS', 'FLOWERS'][i % 3], 6, [0, 3.76, -4.69], { background: '#5b6857', serif: true }).rotation.y = Math.PI;
+    [-3.08, 3.08].forEach(bx => [3.02, 4.5].forEach(by => {
+      const fixing = cylinder(g, 0.045, 0.045, 0.035, '#e5c997', [bx, by, -4.69], 8);
+      fixing.rotation.x = Math.PI / 2;
+    }));
     plant(scene, x + 5, 0, 31.4, 1.9);
   }
   for (let x = -36; x <= 36; x += 12) {
@@ -93,6 +107,7 @@ export default function buildWorld(scene) {
   plant(building, 10.8, 0, -7.9, 1.4); plant(building, -6.7, 0, 8, 1.3);
   couch(building, 7, 0, 5); block(7, 5, 4, 1.4, 1);
   floorLamp(building, 9.8, 0, 5); plant(building, 12, 0, 8.4);
+  const leaderboard = leaderboardBoard(building);
 
   // A real reflection, with a separate camera layer for the first-person body.
   box(building, [3.3, 2.9, 0.18], '#b99861', [-5, 1.65, -9.65]);
@@ -136,5 +151,5 @@ export default function buildWorld(scene) {
     const m = new THREE.Mesh(new THREE.RingGeometry(0.43, 0.48, 32), new THREE.MeshBasicMaterial({ color: '#e4bc73', side: THREE.DoubleSide, transparent: true, opacity: 0.75 }));
     m.rotation.x = -Math.PI / 2; m.position.set(s.x, upper + 0.07, s.z + 2.5); building.add(m); return m;
   });
-  return { cars, obstacles, markers, mirror, faceButton };
+  return { cars, obstacles, markers, mirror, faceButton, leaderboard };
 }
