@@ -52,14 +52,16 @@ export default function buildWorld(scene) {
   // Two real floors, an open stairwell on the west, and street-facing windows.
   box(building, [28, 0.25, 20], '#d9c09b', [0, -0.14, 0]);
   box(building, [23.4, 0.25, 20], '#9c7855', [2.3, upper - 0.14, 0]);
-  box(building, [4.6, 0.25, 6.3], '#9c7855', [-11.7, upper - 0.14, -6.85]);
-  box(building, [4.6, 0.25, 2.1], '#9c7855', [-11.7, upper - 0.14, 8.95]);
+  // Landings meet the first and last stair exactly, without a visible slit.
+  box(building, [4.6, 0.25, 6.5], '#9c7855', [-11.7, upper - 0.14, -6.75]);
+  box(building, [4.6, 0.25, 2.5], '#9c7855', [-11.7, upper - 0.14, 8.75]);
   for (let x = -8.8; x < 14; x += 0.8) box(building, [0.76, 0.025, 19.7], Math.round(x * 5) % 2 ? '#bd946b' : '#c59f77', [x, upper + 0.005, 0]);
   box(building, [28, 0.25, 20], '#dfcaa6', [0, 9.25, 0]);
   [0, upper].forEach((y, floor) => {
-    box(building, [28, 4.55, 0.3], '#e0cfaf', [0, y + 2.2, -10]);
-    box(building, [0.3, 4.55, 20], '#d5bd98', [-14, y + 2.2, 0]);
-    box(building, [0.3, 4.55, 20], '#d5bd98', [14, y + 2.2, 0]);
+    // Each wall is exactly one storey tall, so adjacent storeys share an edge.
+    box(building, [28, upper, 0.3], '#e0cfaf', [0, y + upper / 2, -10]);
+    box(building, [0.3, upper, 20], '#d5bd98', [-14, y + upper / 2, 0]);
+    box(building, [0.3, upper, 20], '#d5bd98', [14, y + upper / 2, 0]);
     box(building, [27.5, 1.05, 0.13], '#3d5848', [0, y + 0.55, -9.8]);
     box(building, [0.12, 1.05, 19.7], '#3d5848', [13.79, y + 0.55, 0]);
     box(building, [27.6, 0.07, 0.17], '#c6a773', [0, y + 1.1, -9.75]);

@@ -33,7 +33,7 @@ module.exports = function casinoRouter(authMiddleware) {
     const upper = req.body.floor === 2;
     if (seat && !upper) return res.status(400).json({ error: 'The lounge is upstairs.' });
     const stairs = world.stairs;
-    const onStairs = x > stairs.minX && x < stairs.maxX && z > stairs.topZ && z < stairs.bottomZ;
+    const onStairs = x > stairs.walkMinX && x < stairs.walkMaxX && z > stairs.topZ && z < stairs.bottomZ;
     const y = seat ? world.upperFloor : onStairs
       ? world.upperFloor * (stairs.bottomZ - z) / (stairs.bottomZ - stairs.topZ)
       : upper ? world.upperFloor : 0;

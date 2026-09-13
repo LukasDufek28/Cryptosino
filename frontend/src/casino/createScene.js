@@ -39,6 +39,7 @@ export default function createScene(host, events) {
   const peers = new Map();
   const pos = new THREE.Vector3(layout.spawn.x, layout.spawn.y, layout.spawn.z);
   let yaw = layout.spawn.yaw, pitch = -0.05, floor = 2, seat = null;
+  let wasOnStairs = false;
   let jumpHeight = 0, jumpVelocity = 0;
   const gravity = 18, jumpSpeed = 5.5;
   let enabled = true, disposed = false, last = 0, uiAt = 0, nearest = null;
@@ -144,27 +145,40 @@ export default function createScene(host, events) {
   function canMove(x, z) {
     if (Math.abs(x) > 45 || z > 32 || z < -9.4) return false;
     const s = layout.stairs;
-    const stairLane = x > s.minX + 0.25 && x < s.maxX - 0.05;
-    const stairRun = z < s.bottomZ && z > s.topZ;
+    const inStairLane = value => value > s.walkMinX && value < s.walkMaxX;
+    const inStairRun = value => value < s.bottomZ && value > s.topZ;
+    const onStairs = inStairLane(pos.x) && inStairRun(pos.z);
+    const nextOnStairs = inStairLane(x) && inStairRun(z);
     if (floor === 2 && (x > 13.4 || x < -13.4 || z > 9.35)) return false;
     if (z < 10 && Math.abs(x) > 13.4) return false;
     // Glazing is solid except for the reception entrance.
     if (floor === 1 && z > 9.35 && z < 10.6 && Math.abs(x) > 1.75) return false;
-    // Rail beside the stairwell: enter the staircase only at its landings.
-    if (stairRun && (stairLane !== (pos.x < s.maxX))) return false;
-    if (floor === 2 && stairRun && x < -9.4 && !stairLane) return false;
+    // The rails are solid along the whole flight. A player can enter only from
+    // the landing that belongs to their current floor, never from the side or
+    // from the small ground-floor space beneath the upper landing.
+    if (onStairs && inStairRun(z) && !inStairLane(x)) return false;
+    if (nextOnStairs && !onStairs) {
+      if (!inStairLane(pos.x)) return false;
+      if (floor === 1 && pos.z < s.bottomZ) return false;
+      if (floor === 2 && pos.z > s.topZ) return false;
+    }
     if (world.obstacles.some(o => o.floor === floor && Math.abs(x - o.x) < o.w / 2 + 0.24 && Math.abs(z - o.z) < o.d / 2 + 0.24)) return false;
     return true;
   }
   function updateFloor() {
     const s = layout.stairs;
-    if (pos.x > s.minX && pos.x < s.maxX) {
-      if (pos.z <= s.topZ + 0.05) { floor = 2; pos.y = layout.upperFloor; }
-      else if (pos.z >= s.bottomZ - 0.05) { floor = 1; pos.y = 0; }
-      else {
-        pos.y = layout.upperFloor * (s.bottomZ - pos.z) / (s.bottomZ - s.topZ);
-      }
-    } else pos.y = floor === 2 ? layout.upperFloor : 0;
+    const inLane = pos.x > s.walkMinX && pos.x < s.walkMaxX;
+    const onStairs = inLane && pos.z > s.topZ && pos.z < s.bottomZ;
+    if (onStairs) {
+      pos.y = layout.upperFloor * (s.bottomZ - pos.z) / (s.bottomZ - s.topZ);
+    } else {
+      // Only completing a real traversal changes floors. Merely walking into
+      // the footprint below the upper landing must leave the player downstairs.
+      if (wasOnStairs && inLane && pos.z <= s.topZ) floor = 2;
+      else if (wasOnStairs && inLane && pos.z >= s.bottomZ) floor = 1;
+      pos.y = floor === 2 ? layout.upperFloor : 0;
+    }
+    wasOnStairs = onStairs;
   }
   function updateNearest() {
     nearest = null;

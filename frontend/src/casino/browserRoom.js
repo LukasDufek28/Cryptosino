@@ -14,7 +14,7 @@ function cleanPose(p) {
   const seat = layout.seats.find(s => s.id === p.seatId);
   if (p.seatId !== null && (!seat || p.floor !== 2 || Math.hypot(p.x - seat.x, p.z - seat.z) > 3.2)) return null;
   const s = layout.stairs;
-  const onStairs = p.x > s.minX && p.x < s.maxX && p.z > s.topZ && p.z < s.bottomZ;
+  const onStairs = p.x > s.walkMinX && p.x < s.walkMaxX && p.z > s.topZ && p.z < s.bottomZ;
   const baseY = onStairs ? layout.upperFloor * (s.bottomZ - p.z) / (s.bottomZ - s.topZ) : p.floor === 2 ? layout.upperFloor : 0;
   return { x: seat ? seat.x : p.x, z: seat ? seat.z : p.z, yaw: p.yaw,
     y: (seat ? layout.upperFloor : baseY) + (seat ? 0 : p.jumpHeight),
