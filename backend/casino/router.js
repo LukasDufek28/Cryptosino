@@ -10,8 +10,11 @@ module.exports = function casinoRouter(authMiddleware) {
   router.get('/world', (req, res) => res.json(world));
   router.get('/leaderboard', async (req, res) => {
     try {
-      const { rows } = await query('SELECT username, balance FROM users ORDER BY balance DESC, id ASC LIMIT 10');
-      res.json({ leaders: rows });
+      const [current, peak] = await Promise.all([
+        query('SELECT username, balance FROM users ORDER BY balance DESC, id ASC LIMIT 10'),
+        query('SELECT username, peak_balance FROM users ORDER BY peak_balance DESC, id ASC LIMIT 10')
+      ]);
+      res.json({ leaders: current.rows, peakLeaders: peak.rows });
     } catch { res.status(503).json({ error: 'Leaderboard unavailable.' }); }
   });
   router.get('/leaderboard/peak', async (req, res) => {
