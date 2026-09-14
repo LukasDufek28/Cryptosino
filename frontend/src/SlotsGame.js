@@ -2,6 +2,7 @@ import React, {
   useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle,
 } from 'react';
 import './SlotsGame.css';
+import configs from './slots/config.json';
 
 const API_URL = process.env.REACT_APP_API_URL || '';
 
@@ -26,25 +27,9 @@ const SYMBOL_DEFS = {
   },
 };
 
-const PAYTABLE = {
-  joker: [
-    { symbol: 'JOKER',  pays: [{ n: 3, mult: 235 }] },
-    { symbol: '7',      pays: [{ n: 3, mult: 46  }] },
-    { symbol: 'BAR',    pays: [{ n: 3, mult: 16  }] },
-    { symbol: 'BELL',   pays: [{ n: 3, mult: 9   }] },
-    { symbol: 'WATER',  pays: [{ n: 3, mult: 3   }] },
-    { symbol: 'CHERRY', pays: [{ n: 3, mult: 1   }] },
-  ],
-  golden: [
-    { symbol: 'BOOK',   pays: [{ n: 3, mult: 20 }, { n: 4, mult: 80  }, { n: 5, mult: 270 }] },
-    { symbol: 'SCARAB', pays: [{ n: 3, mult: 17 }, { n: 4, mult: 55  }, { n: 5, mult: 163 }] },
-    { symbol: 'ACE',    pays: [{ n: 3, mult: 11 }, { n: 4, mult: 35  }, { n: 5, mult: 111 }] },
-    { symbol: 'KING',   pays: [{ n: 3, mult: 9  }, { n: 4, mult: 25  }, { n: 5, mult: 76  }] },
-    { symbol: 'QUEEN',  pays: [{ n: 3, mult: 7  }, { n: 4, mult: 21  }, { n: 5, mult: 62  }] },
-    { symbol: 'JACK',   pays: [{ n: 3, mult: 6  }, { n: 4, mult: 17  }, { n: 5, mult: 49  }] },
-    { symbol: 'TEN',    pays: [{ n: 3, mult: 4  }, { n: 4, mult: 13  }, { n: 5, mult: 35  }] },
-  ],
-};
+const PAYTABLE = Object.fromEntries(Object.entries(configs).map(([variant, config]) => [variant,
+  Object.entries(config.paytable).map(([symbol, pays]) => ({ symbol,
+    pays: pays.map((mult, n) => ({ n, mult })).filter(pay => pay.mult > 0) }))]));
 
 // Payline definitions (mirror of server) for client-side win highlighting
 const PAYLINES_CLIENT = {
@@ -242,6 +227,8 @@ export default function SlotsGame({ balance, setBalance, token }) {
   const [showRespin,   setShowRespin]   = useState(false);
   const [showPaytable, setShowPaytable] = useState(false);
   const [autoSpin,     setAutoSpin]     = useState(false);
+  const [recovering, setRecovering] = useState(false);
+  const pendingRequest = useRef(null);
 
   const autoRef       = useRef(false);
   const spinRef       = useRef(null);
@@ -287,17 +274,17 @@ export default function SlotsGame({ balance, setBalance, token }) {
 
   const handleSpin = useCallback(async () => {
     if (!canSpin) return;
-    const wager = Number(bet);
+    const wager = pendingRequest.current?.bet ?? Number(bet);
     if (!wager || wager <= 0) { setMessage('⚠ Enter a valid bet'); return; }
-    if (wager > balance)       { setMessage('⚠ Insufficient balance'); return; }
+    if (!pendingRequest.current && wager > balance) { setMessage('⚠ Insufficient balance'); return; }
+    pendingRequest.current ||= { bet: wager, variant, requestId: crypto.randomUUID() };
 
     setCanSpin(false);
     setOutcome(null); setWinCells({}); setMessage(''); setShowRespin(false);
     setLockedReels(new Set());
     pendingTimers.current = [];
 
-    // Deduct bet immediately so balance drops the instant spin starts
-    setBalance(b => Number((b - wager).toFixed(2)));
+    // Only the server settles money; a failed response is not evidence of a refund.
 
     // Start all reels spinning immediately
     for (let i = 0; i < numReels; i++) reelRefsArr.current[i]?.current?.spin();
@@ -309,36 +296,29 @@ export default function SlotsGame({ balance, setBalance, token }) {
         fetch(`${API_URL}/api/slots/spin`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ bet: wager, variant }),
+          body: JSON.stringify(pendingRequest.current),
+          signal: AbortSignal.timeout(12000),
         }).then(async r => {
           const d = await r.json();
-          if (!r.ok) throw new Error(d.error || 'Spin failed');
+          if (!r.ok) { const error = new Error(d.error || 'Spin failed'); error.status = r.status; throw error; }
           return d;
         }),
         new Promise(resolve => setTimeout(resolve, MIN_SPIN_MS)),
       ]);
       result = data;
+      pendingRequest.current = null; setRecovering(false);
+      setBalance(Number(result.newBalance));
     } catch (e) {
-      setMessage(e.message || 'Network error');
-      setBalance(b => Number((b + wager).toFixed(2))); // refund on error
+      if (e.status >= 400 && e.status < 500) pendingRequest.current = null;
+      setRecovering(Boolean(pendingRequest.current));
+      setMessage(pendingRequest.current ? 'Connection interrupted. Press Spin to recover the same round without another charge.' : e.message || 'Network error');
+      setAutoSpin(false);
       for (let i = 0; i < numReels; i++) reelRefsArr.current[i]?.current?.reset();
       setCanSpin(true);
       return;
     }
 
-    // Build phase-1 finals: locked reels show [x, JOKER, x], respun show random
-    const randSym = () => {
-      const k = Object.keys(SYMBOL_DEFS[variant]);
-      return k[Math.floor(Math.random() * k.length)];
-    };
-    const phase1Finals = result.visible.map((vis, ri) => {
-      if (result.respin?.triggered) {
-        return result.respin.lockedReels.includes(ri)
-          ? [randSym(), 'JOKER', randSym()]
-          : [randSym(), randSym(), randSym()];
-      }
-      return vis;
-    });
+    const phase1Finals = result.respin?.triggered ? result.initialVisible : result.visible;
 
     // Stop reels one by one with stagger
     for (let i = 0; i < numReels; i++) {
@@ -368,7 +348,6 @@ export default function SlotsGame({ balance, setBalance, token }) {
 
     function showResult(res, v) {
       // Apply final balance only now — winnings land with the reels
-      setBalance(Number(res.newBalance));
       setOutcome(res);
       setWinCells(buildWinCells(res, v));
       setLockedReels(new Set());
@@ -396,7 +375,7 @@ export default function SlotsGame({ balance, setBalance, token }) {
       <div className="slots-header">
         <div>
           <div className="slots-title">
-            {variant === 'joker' ? '🃏 RESPIN JOKER' : '📖 GOLDEN BOOK'}
+            {variant === 'joker' ? '🃏 AMBER JOKER' : '📖 AMBER BOOK'}
           </div>
           <div className="slots-subtitle">
             {variant === 'joker'
@@ -414,8 +393,8 @@ export default function SlotsGame({ balance, setBalance, token }) {
       <div className="slots-tabs">
         {['joker','golden'].map(v => (
           <button key={v} className={`slots-tab${variant === v ? ' active' : ''}`}
-            onClick={() => canSpin && setVariant(v)} disabled={!canSpin}>
-            {v === 'joker' ? '🃏 Respin Joker' : '📖 Golden Book'}
+            onClick={() => canSpin && !recovering && setVariant(v)} disabled={!canSpin || recovering}>
+            {v === 'joker' ? '🃏 Amber Joker' : '📖 Amber Book'}
           </button>
         ))}
       </div>
@@ -508,15 +487,15 @@ export default function SlotsGame({ balance, setBalance, token }) {
             {variant === 'joker' && (
               <p className="slots-pt-note">
                 🃏 JOKER is wild on all lines.<br />
-                JOKER on the centre row locks it — other reels get a <b>free respin</b>!<br />
-                RTP ≈ 97%
+                JOKER on the centre row locks it — other reels get a <b>free respin</b>! The final respin replaces the initial award.<br />
+                Custom rules · measured return 95.71% in a 1,000,000-round audit; not provider-certified RTP.
               </p>
             )}
             {variant === 'golden' && (
               <p className="slots-pt-note">
                 📖 BOOK is both wild and scatter.<br />
-                3 · 4 · 5 BOOKs anywhere = <b>2× · 5× · 25×</b> total-bet bonus!<br />
-                RTP ≈ 96%
+                3 · 4 · 5 BOOKs anywhere = <b>1× · 3× · 10×</b> total-bet bonus!<br />
+                Custom rules · measured return 96.27% in a 1,000,000-round audit; not provider-certified RTP.
               </p>
             )}
           </div>

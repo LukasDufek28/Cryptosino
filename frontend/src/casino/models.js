@@ -117,7 +117,13 @@ export function avatar(parent, username, color, faceSeed = 0) {
   const g = group(parent);
   cylinder(g, 0.24, 0.3, 0.65, color, [0, 1.03, 0], 6);
   mesh(g, new THREE.IcosahedronGeometry(0.24, 1), '#d3a082', [0, 1.65, 0]);
-  [-0.13, 0.13].forEach(a => box(g, [0.2, 0.55, 0.22], '#3d4d4c', [a, 0.42, 0]));
+  const legs = [-0.13, 0.13].map(a => {
+    const hip = group(g, a, 0.7, 0);
+    box(hip, [0.2, 0.27, 0.22], '#3d4d4c', [0, -0.135, 0]);
+    const knee = group(hip, 0, -0.27, 0);
+    box(knee, [0.2, 0.28, 0.22], '#3d4d4c', [0, -0.14, 0]);
+    return { hip, knee };
+  });
   [-0.36, 0.36].forEach(a => box(g, [0.16, 0.55, 0.19], color, [a, 1.02, 0]));
   const name = sign(g, username.slice(0, 22), 1.7, [0, 2.17, 0]);
   const chatCanvas = document.createElement('canvas'); chatCanvas.width = 1024; chatCanvas.height = 512;
@@ -177,7 +183,10 @@ export function avatar(parent, username, color, faceSeed = 0) {
     mouth.geometry = new THREE.TubeGeometry(curve, 12, 0.012, 5, false);
   }
   setFace(faceSeed);
-  return { group: g, name, chatBubble, setFace, showChat, updateChat };
+  function setSeated(value) {
+    legs.forEach(({ hip, knee }) => { hip.rotation.x = value ? Math.PI / 2 : 0; knee.rotation.x = value ? -Math.PI / 2 : 0; });
+  }
+  return { group: g, name, chatBubble, setFace, showChat, updateChat, setSeated };
 }
 export function receptionist(parent, x, y, z) {
   const g = group(parent, x, y, z);

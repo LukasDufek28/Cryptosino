@@ -5,6 +5,8 @@ import createScene from './createScene';
 import usePresence from './usePresence';
 import PlayerList from './PlayerList';
 import useLeaderboard from './useLeaderboard';
+import useSlotMachines from './useSlotMachines';
+import SlotControls from './SlotControls';
 import layout from './worldLayout.json';
 import casinoVersion from './version.json';
 import './CasinoWorld.css';
@@ -77,6 +79,7 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
   const [chatOpen, setChatOpen] = useState(false);
   const [chatText, setChatText] = useState('');
   const openGameRef = useRef(null);
+  const openSlotRef = useRef(null);
   const resetBalanceRef = useRef(null);
   const resetBusyRef = useRef(false);
   openGameRef.current = game => { setActiveGame(game); setPanel(token && user ? 'game' : 'auth'); };
@@ -107,7 +110,7 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
   useEffect(() => {
     let instance;
     try {
-      instance = createScene(host.current, { onGame: game => openGameRef.current(game), onResetBalance: () => resetBalanceRef.current(), onStatus: setStatus, onSeat: setSeat, onError: setError });
+      instance = createScene(host.current, { onGame: game => openGameRef.current(game), onSlot: id => openSlotRef.current?.(id), onResetBalance: () => resetBalanceRef.current(), onStatus: setStatus, onSeat: setSeat, onError: setError });
       sceneRef.current = instance; setReady(true);
     } catch {
       setError('The 3D room could not start. Enable hardware acceleration and use a browser with WebGL 2 support.');
@@ -116,6 +119,8 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
   }, []);
   const presence = usePresence(token, sceneRef, ready);
   useLeaderboard(sceneRef, ready);
+  const slots = useSlotMachines(sceneRef, ready, token, setBalance);
+  openSlotRef.current = id => { if (!token) { setActiveGame(null); setPanel('auth'); } else slots.claim(id); };
   // Signing out also closes any retained authenticated game screen.
   useEffect(() => { if (!token) setPanel(current => current === 'game' ? null : current); }, [token]);
   useEffect(() => { sceneRef.current?.setEnabled(!welcome && !panel && !chatOpen && !error); }, [welcome, panel, chatOpen, error, ready]);
@@ -159,7 +164,7 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
       <div className="amber-reticle" aria-hidden="true">·</div>
       <div className="amber-floor-label"><span>0{status.floor}</span><div><small>{status.floor === 2 ? 'UPSTAIRS' : 'GROUND FLOOR'}</small><strong>{status.floor === 2 ? 'The casino & lounge' : 'The welcome hall'}</strong></div></div>
       {status.prompt && <button className="amber-interact" onClick={() => sceneRef.current?.interact()}><kbd>E</kbd>{status.prompt}<span>↗</span></button>}
-      {seat && <div className="amber-seated">Take your time. Watch the city go by.</div>}
+      {seat && !slots.selected && <div className="amber-seated">Take your time. Watch the city go by.</div>}
       {!status.locked && <button className="amber-resume" onClick={() => sceneRef.current?.lock()}>Click the scene to look around · or drag</button>}
       <div className="amber-mobile-controls" aria-label="Movement controls">
         {[[0, 1, '↑'], [-1, 0, '←'], [0, -1, '↓'], [1, 0, '→']].map(([x, y, label]) => <button key={label} aria-label={`Move ${label}`} onPointerDown={e => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); sceneRef.current?.move(x, y); }} onPointerUp={() => sceneRef.current?.move(0, 0)} onPointerCancel={() => sceneRef.current?.move(0, 0)} onLostPointerCapture={() => sceneRef.current?.move(0, 0)}>{label}</button>)}
@@ -172,6 +177,7 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
     </footer>
     {showMap && !panel && <MiniMap status={status} />}
     {presence.message && <div className="amber-presence-note" role="status">{presence.message}</div>}
+    {!welcome && !panel && <SlotControls slots={slots} />}
     {receptionMessage && <div className="amber-reception-note" role="status">{receptionMessage}<button aria-label="Dismiss receptionist message" onClick={() => setReceptionMessage('')}>×</button></div>}
     {chatOpen && <form className="amber-chat-compose" onSubmit={event => {
       event.preventDefault(); sceneRef.current?.chat(chatText); setChatOpen(false); setChatText('');

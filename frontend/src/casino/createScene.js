@@ -39,6 +39,7 @@ export default function createScene(host, events) {
   const peers = new Map();
   const pos = new THREE.Vector3(layout.spawn.x, layout.spawn.y, layout.spawn.z);
   let yaw = layout.spawn.yaw, pitch = -0.05, floor = 2, seat = null;
+  let slotPublisher = null, slotRefresh = null;
   let traversingStairs = false;
   let jumpHeight = 0, jumpVelocity = 0;
   const gravity = 18, jumpSpeed = 5.5;
@@ -89,6 +90,7 @@ export default function createScene(host, events) {
       return;
     }
     if (nearest.kind === 'seat') {
+      if (nearest.item.kind === 'slot') { clearInput(); unlock(); events.onSlot(nearest.item.machineId); return; }
       seat = nearest.item; pos.set(seat.x, layout.upperFloor, seat.z); yaw = seat.yaw; pitch = -0.03;
       poseRevision += 1;
       events.onSeat(seat.id);
@@ -230,7 +232,7 @@ export default function createScene(host, events) {
     if (!seat && pos.y > layout.upperFloor - 0.1) {
       camera.getWorldDirection(direction);
       let best = 3.4;
-      const options = [...layout.stations.map(item => ({ kind: 'game', item })), ...layout.seats.map(item => ({ kind: 'seat', item }))];
+      const options = [...layout.stations.filter(item => item.game !== 'slots').map(item => ({ kind: 'game', item })), ...layout.seats.map(item => ({ kind: 'seat', item }))];
       options.forEach(option => {
         const s = option.item;
         const distance = Math.hypot(pos.x - s.x, pos.z - s.z);
@@ -282,14 +284,16 @@ export default function createScene(host, events) {
         jumpVelocity -= gravity * dt;
         if (jumpHeight <= 0) { jumpHeight = 0; jumpVelocity = 0; }
       }
-      camera.position.set(pos.x, THREE.MathUtils.lerp(camera.position.y, pos.y + jumpHeight + (seat ? 1.55 : 1.65), Math.min(dt * 12, 1)), pos.z);
+      camera.position.set(pos.x, THREE.MathUtils.lerp(camera.position.y, pos.y + jumpHeight + (seat?.kind === 'slot' ? 1.9 : seat ? 1.55 : 1.65), Math.min(dt * 12, 1)), pos.z);
       camera.rotation.set(pitch, yaw, 0, 'YXZ');
-      self.group.position.set(pos.x, pos.y + jumpHeight - (seat ? 0.4 : 0), pos.z);
+      self.group.position.set(pos.x, pos.y + jumpHeight + (seat?.kind === 'slot' ? 0.25 : seat ? -0.4 : 0), pos.z);
+      self.setSeated(Boolean(seat));
       self.group.rotation.y = yaw;
       self.chatBubble.quaternion.copy(camera.quaternion).premultiply(self.group.quaternion.clone().invert());
       self.updateChat(now);
       world.receptionist.trackNearest([self.group.position, ...[...peers.values()].map(peer => peer.group.position)]);
       world.mirror.visible = floor === 1;
+      world.liveSlots.forEach(machine => machine.frame(now));
       localWorldSeconds = worldClock ? worldClock() : localWorldSeconds + dt;
       world.cars.forEach((c, i) => {
         const distance = carStarts[i] + localWorldSeconds * c.direction * c.speed;
@@ -314,6 +318,21 @@ export default function createScene(host, events) {
   }
   return {
     lock, interact, stand, jump,
+    sitAtSlot(id) {
+      const s = layout.seats.find(item => item.machineId === id);
+      if (!s || disposed) return;
+      seat = s; floor = 2; jumpHeight = 0; jumpVelocity = 0;
+      pos.set(s.x, layout.upperFloor, s.z); yaw = s.yaw; pitch = -0.34;
+      poseRevision += 1; events.onSeat(s.id);
+    },
+    updateSlots(machines, serverNow) {
+      if (disposed) return;
+      world.liveSlots.forEach(m => m.update(machines.find(state => state.id === m.id) || null, serverNow));
+    },
+    setSlotPublisher(callback) { slotPublisher = callback; },
+    setSlotRefresh(callback) { slotRefresh = callback; },
+    notifySlotChange() { slotPublisher?.(); },
+    refreshSlots() { slotRefresh?.(); },
     focus() { if (enabled && !disposed) canvas.focus({ preventScroll: true }); },
     setEnabled(value) { enabled = value; if (!value) { clearInput(); unlock(); } },
     move(x, y) { touch.x = x; touch.y = y; },
@@ -338,7 +357,9 @@ export default function createScene(host, events) {
           const a = avatar(scene, p.username, ['#769b87', '#ba856b', '#bbac80'][p.id % 3]);
           a.group.position.set(p.x, p.y, p.z); peers.set(p.id, { ...a, target: new THREE.Vector3(), yaw: p.yaw });
         }
-        const peer = peers.get(p.id); peer.target.set(p.x, p.y - (p.seatId ? 0.4 : 0), p.z); peer.yaw = p.yaw;
+        const peer = peers.get(p.id), peerSeat = layout.seats.find(s => s.id === p.seatId);
+        peer.target.set(p.x, p.y + (peerSeat?.kind === 'slot' ? 0.25 : p.seatId ? -0.4 : 0), p.z); peer.yaw = p.yaw;
+        peer.setSeated(Boolean(p.seatId));
         peer.setFace(p.faceSeed || 0);
       });
     },

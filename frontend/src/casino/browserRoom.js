@@ -95,6 +95,13 @@ export default function browserRoom(token, scene, onStatus) {
     try { packet = JSON.parse(raw); } catch { return; }
     if (!packet || packet.generation !== generation) return;
     link.lastReceived = now;
+    if (packet.type === 'slotChanged') {
+      if ((!isHost() && link.id !== host) || now - (link.lastSlotHintAt || 0) < 500) return;
+      link.lastSlotHintAt = now;
+      scene.refreshSlots();
+      if (isHost()) for (const [id, peer] of links) if (id !== link.id) send(peer.events, { type: 'slotChanged', generation });
+      return;
+    }
     if (isHost()) {
       if (packet.type === 'chat') {
         const text = cleanChat(packet.text);
@@ -290,6 +297,11 @@ export default function browserRoom(token, scene, onStatus) {
     }
   }
   const tickTimer = setInterval(tick, TICK_MS);
+  scene.setSlotPublisher(() => {
+    if (!active()) return;
+    if (isHost()) for (const link of links.values()) send(link.events, { type: 'slotChanged', generation });
+    else send(links.get(host)?.events, { type: 'slotChanged', generation });
+  });
   scene.setChatSender(sendChat);
   document.addEventListener('visibilitychange', visibility);
   window.addEventListener('pagehide', leave);
@@ -297,6 +309,6 @@ export default function browserRoom(token, scene, onStatus) {
   return () => {
     stopped = true; clearTimeout(timer); clearInterval(tickTimer); controller?.abort();
     document.removeEventListener('visibilitychange', visibility); window.removeEventListener('pagehide', leave);
-    scene.setChatSender(null); disconnect(); void leave();
+    scene.setChatSender(null); scene.setSlotPublisher(null); disconnect(); void leave();
   };
 }

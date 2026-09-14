@@ -15,6 +15,7 @@ module.exports = function casinoRouter(authMiddleware) {
     } catch { res.status(503).json({ error: 'Leaderboard unavailable.' }); }
   });
   router.use('/browser-room', require('./browserRoom')(authMiddleware));
+  router.use('/slots', require('../slots/machines').router(authMiddleware));
   router.put('/presence', authMiddleware, async (req, res) => {
     const { x, z, yaw, seatId = null } = req.body;
     const faceSeed = req.body.faceSeed ?? 0;

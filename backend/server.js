@@ -774,141 +774,34 @@ if (process.env.NODE_ENV !== 'production') {
 // ===================== SLOTS =====================
 // Two variants: 'joker' (3×3, respin mechanic) and 'golden' (5×3, book scatter)
 
-const SLOTS_CONFIG = {
-  joker: {
-    // 3 reels × 30 stops — empirically verified at 96.25% RTP (1M spin simulation)
-    // Frequencies: JOKER×2, 7×3, BAR×4, BELL×5, WATER×7, CHERRY×9 = 30
-    reels: [
-      ['JOKER','CHERRY','7','WATER','BELL','CHERRY','BAR','WATER','7','BELL','WATER','CHERRY','BAR','BELL','WATER','JOKER','CHERRY','WATER','BELL','7','BAR','WATER','CHERRY','BELL','WATER','BAR','CHERRY','BELL','7','WATER'],
-      ['BELL','7','CHERRY','WATER','JOKER','BELL','WATER','BAR','CHERRY','BELL','7','WATER','CHERRY','BELL','BAR','WATER','JOKER','CHERRY','BELL','WATER','7','BAR','BELL','WATER','CHERRY','7','BELL','BAR','WATER','CHERRY'],
-      ['7','WATER','BELL','CHERRY','BAR','WATER','JOKER','BELL','WATER','CHERRY','7','BELL','WATER','BAR','CHERRY','WATER','BELL','7','CHERRY','WATER','JOKER','BAR','WATER','CHERRY','BELL','7','WATER','BAR','CHERRY','BELL'],
-    ],
-    rows: 3,
-    paylines: [[0,0,0],[1,1,1],[2,2,2],[0,1,2],[2,1,0]],
-    wild: 'JOKER',
-    scatter: null,
-    // paytable[symbol][count] — 3-of-a-kind only; JOKER is pure wild
-    paytable: {
-      JOKER:  [0, 0, 0, 235],
-      '7':    [0, 0, 0,  46],
-      BAR:    [0, 0, 0,  16],
-      BELL:   [0, 0, 0,   9],
-      WATER:  [0, 0, 0,   3],
-      CHERRY: [0, 0, 0,   1],
-    },
-  },
-  golden: {
-    // 5 reels × 30 stops — tuned for ~96% RTP
-    // Frequencies: BOOK×2, SCARAB×3, ACE×4, KING×5, QUEEN×5, JACK×5, TEN×6 = 30
-    reels: [
-      ['BOOK','TEN','KING','ACE','JACK','QUEEN','SCARAB','TEN','KING','TEN','QUEEN','ACE','TEN','KING','JACK','SCARAB','TEN','QUEEN','JACK','ACE','JACK','KING','QUEEN','TEN','BOOK','JACK','QUEEN','ACE','SCARAB','KING'],
-      ['TEN','KING','ACE','QUEEN','JACK','TEN','KING','SCARAB','QUEEN','ACE','JACK','TEN','KING','QUEEN','JACK','ACE','TEN','BOOK','QUEEN','KING','TEN','JACK','ACE','SCARAB','QUEEN','KING','TEN','JACK','BOOK','SCARAB'],
-      ['ACE','TEN','JACK','KING','QUEEN','TEN','BOOK','KING','JACK','SCARAB','ACE','QUEEN','TEN','KING','ACE','JACK','QUEEN','TEN','KING','SCARAB','QUEEN','ACE','TEN','JACK','KING','BOOK','SCARAB','QUEEN','JACK','TEN'],
-      ['KING','ACE','TEN','JACK','TEN','QUEEN','ACE','TEN','SCARAB','KING','JACK','QUEEN','ACE','TEN','KING','QUEEN','JACK','BOOK','TEN','ACE','SCARAB','KING','QUEEN','TEN','JACK','KING','BOOK','SCARAB','QUEEN','JACK'],
-      ['JACK','QUEEN','TEN','ACE','KING','JACK','TEN','QUEEN','BOOK','JACK','KING','TEN','SCARAB','ACE','QUEEN','TEN','KING','JACK','ACE','QUEEN','TEN','SCARAB','KING','JACK','ACE','QUEEN','TEN','BOOK','SCARAB','KING'],
-    ],
-    rows: 3,
-    paylines: [
-      [1,1,1,1,1],[0,0,0,0,0],[2,2,2,2,2],
-      [0,1,2,1,0],[2,1,0,1,2],
-      [1,0,0,0,1],[1,2,2,2,1],
-      [0,0,1,2,2],[2,2,1,0,0],
-      [1,0,1,2,1],
-    ],
-    wild: 'BOOK',
-    scatter: 'BOOK',
-    // No ×2 pays on 5-reel — need 3+ to win (industry standard)
-    // Empirically verified at 96.47% RTP (1M spin simulation)
-    paytable: {
-      BOOK:   [0, 0, 0, 20,  80, 270],
-      SCARAB: [0, 0, 0, 17,  55, 163],
-      ACE:    [0, 0, 0, 11,  35, 111],
-      KING:   [0, 0, 0,  9,  25,  76],
-      QUEEN:  [0, 0, 0,  7,  21,  62],
-      JACK:   [0, 0, 0,  6,  17,  49],
-      TEN:    [0, 0, 0,  4,  13,  35],
-    },
-  },
-};
-
-function slotsSpinReel(strip, reelIdx, serverSeed, clientSeed, nonce, offset = 0) {
-  const hash = crypto.createHmac('sha256', serverSeed)
-    .update(`${clientSeed}:${nonce}:r${reelIdx + offset}`)
-    .digest('hex');
-  return parseInt(hash.slice(0, 8), 16) % strip.length;
-}
-
-function getSlotsVisible(config, stops) {
-  // For each reel: [top=stop-1, mid=stop, bot=stop+1] wrapping
-  return config.reels.map((strip, i) => {
-    const s = stops[i];
-    return [
-      strip[(s - 1 + strip.length) % strip.length],
-      strip[s],
-      strip[(s + 1) % strip.length],
-    ];
-  });
-}
-
-function evaluateSlotsPay(config, visible, totalBet) {
-  const { paylines, wild, scatter, paytable, reels } = config;
-  const lineCount = paylines.length;
-  const betPerLine = totalBet / lineCount;
-  const wins = [];
-  let totalPayout = 0;
-
-  for (let p = 0; p < paylines.length; p++) {
-    const line = paylines[p];
-    const lineSyms = line.map((row, ri) => visible[ri][row]);
-    // Find base symbol (first non-wild)
-    let base = lineSyms.find(s => s !== wild) || wild;
-    // Count matching from left
-    let count = 0;
-    for (const s of lineSyms) {
-      if (s === base || s === wild) count++;
-      else break;
-    }
-    if (count >= 2 && paytable[base]) {
-      const mult = paytable[base][Math.min(count, paytable[base].length - 1)] || 0;
-      if (mult > 0) {
-        const linePay = Number((betPerLine * mult).toFixed(4));
-        totalPayout += linePay;
-        wins.push({ line: p, symbol: base, count, mult, payout: linePay });
-      }
-    }
-  }
-
-  // Scatter bonus (BOOK only)
-  if (scatter) {
-    let scatterCount = 0;
-    for (const reel of visible) for (const s of reel) if (s === scatter) scatterCount++;
-    if (scatterCount >= 3) {
-      const scatterMults = { 3: 1, 4: 3, 5: 10 };
-      const sm = scatterMults[Math.min(scatterCount, 5)] || 5;
-      const scatterPay = Number((totalBet * sm).toFixed(4));
-      totalPayout += scatterPay;
-      wins.push({ line: -1, symbol: scatter, count: scatterCount, mult: sm, payout: scatterPay, scatter: true });
-    }
-  }
-
-  return { wins, totalPayout: Number(totalPayout.toFixed(2)) };
-}
+const { SLOTS_CONFIG, spinRound } = require('./slots/math');
+const slotMachines = require('./slots/machines');
 
 app.post('/api/slots/spin', authMiddleware, async (req, res) => {
-  const { bet, clientSeed, variant = 'joker' } = req.body;
+  const { bet, clientSeed, variant = 'joker', machineId, sessionId } = req.body;
+  const requestId = req.body.requestId || crypto.randomUUID();
   const wager = Number(bet);
-  if (!wager || wager <= 0) return res.status(400).json({ error: 'Invalid bet' });
-  const config = SLOTS_CONFIG[variant];
+  if (!Number.isFinite(wager) || wager < 0.1 || wager > 1000000 || Math.abs(wager * 100 - Math.round(wager * 100)) > 0.00001 || !slotMachines.uuid(requestId)) return res.status(400).json({ error: 'Invalid bet or request ID' });
+  const config = Object.prototype.hasOwnProperty.call(SLOTS_CONFIG, variant) ? SLOTS_CONFIG[variant] : null;
   if (!config) return res.status(400).json({ error: 'Invalid variant' });
 
   const serverSeed = process.env.SERVER_SEED || 'default-server-seed';
-  const seed = clientSeed || Math.random().toString(36).slice(2);
-  const nonce = Math.floor(Math.random() * 1e9);
+  const seed = typeof clientSeed === 'string' ? clientSeed.slice(0, 128) : crypto.randomBytes(16).toString('hex');
+  const nonce = crypto.randomInt(0, 2 ** 48 - 1);
 
   try {
     const client = await require('./db').getClient();
     try {
       await client.query('BEGIN');
+      // Serialize retries by user/request before acquiring machine and wallet locks.
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`slots:${req.user.id}:${requestId}`]);
+      const previous = await client.query('SELECT response FROM casino_slot_requests WHERE user_id=$1 AND request_id=$2', [req.user.id, requestId]);
+      if (previous.rows.length) {
+        const current = await client.query('SELECT balance FROM users WHERE id=$1', [req.user.id]);
+        await client.query('COMMIT');
+        return res.json({ ...previous.rows[0].response, newBalance: String(current.rows[0].balance), serverNow: Date.now() });
+      }
+      await slotMachines.lockMachine(client, machineId, sessionId, req.user.id, variant);
       const { rows: userRows } = await client.query(
         'SELECT id, balance FROM users WHERE id=$1 FOR UPDATE', [req.user.id]
       );
@@ -919,35 +812,7 @@ app.post('/api/slots/spin', authMiddleware, async (req, res) => {
         return res.status(400).json({ error: 'Insufficient balance' });
       }
 
-      // Initial spin
-      let stops = config.reels.map((strip, i) => slotsSpinReel(strip, i, serverSeed, seed, nonce));
-      let visible = getSlotsVisible(config, stops);
-      let { wins, totalPayout } = evaluateSlotsPay(config, visible, wager);
-
-      // Respin mechanic: Joker variant — any JOKER on the center row locks that reel, respins the rest (free)
-      let respinInfo = null;
-      if (variant === 'joker') {
-        const midRow = 1;
-        const jokerReels = stops.map((_, ri) => visible[ri][midRow] === 'JOKER' ? ri : -1).filter(i => i >= 0);
-        if (jokerReels.length > 0 && jokerReels.length < config.reels.length) {
-          const newStops = [...stops];
-          const respunReels = [];
-          config.reels.forEach((strip, ri) => {
-            if (!jokerReels.includes(ri)) {
-              newStops[ri] = slotsSpinReel(strip, ri, serverSeed, seed, nonce, 1000);
-              respunReels.push(ri);
-            }
-          });
-          const respinVisible = getSlotsVisible(config, newStops);
-          const respinEval = evaluateSlotsPay(config, respinVisible, wager);
-          // Respin always replaces the original result (Joker power!)
-          stops = newStops;
-          visible = respinVisible;
-          wins = respinEval.wins;
-          totalPayout = respinEval.totalPayout;
-          respinInfo = { triggered: true, lockedReels: jokerReels, respunReels };
-        }
-      }
+      const { stops, visible, wins, totalPayout, respinInfo, initialVisible } = spinRound({ variant, wager, serverSeed, seed, nonce });
 
       const payout = Number(totalPayout.toFixed(2));
       const newBalance = Number((Number(user.balance) - wager + payout).toFixed(2));
@@ -958,21 +823,29 @@ app.post('/api/slots/spin', authMiddleware, async (req, res) => {
       );
       await client.query(
         'INSERT INTO bets (user_id, game, wager, payout, result) VALUES ($1,$2,$3,$4,$5)',
-        [user.id, `slots_${variant}`, wager, payout, JSON.stringify({ stops, winCount: wins.length, totalPayout: payout })]
+        [user.id, `slots_${variant}`, wager, payout, JSON.stringify({ stops, winCount: wins.length, totalPayout: payout, mathVersion: config.mathVersion, requestId, machineId })]
       );
-      await client.query('COMMIT');
-
-      res.json({
-        ok: true, stops, visible, wins,
+      const startedAt = Date.now();
+      const durationMs = respinInfo ? 6500 : variant === 'golden' ? 5000 : 4000;
+      const publicSpin = { id: requestId, machineId: machineId || null, userId: req.user.id, username: req.user.username,
+        variant, startedAt, durationMs, visible, initialVisible, respin: respinInfo, bet: wager, totalPayout: payout, mathVersion: config.mathVersion };
+      const response = {
+        ok: true, stops, visible, wins, initialVisible, mathVersion: config.mathVersion, spin: publicSpin,
         totalPayout: payout.toFixed(2),
         newBalance: newBalance.toFixed(2),
         respin: respinInfo,
         serverSeedHash: crypto.createHash('sha256').update(serverSeed).digest('hex'),
         clientSeed: seed, nonce,
-      });
+      };
+      await client.query('INSERT INTO casino_slot_requests(user_id,request_id,response) VALUES($1,$2,$3)', [user.id, requestId, JSON.stringify(response)]);
+      if (machineId) await client.query(`UPDATE casino_slot_machines SET last_spin=$2,
+        spin_ends_at=to_timestamp($3/1000.0),lease_until=GREATEST(lease_until,to_timestamp($3/1000.0)) WHERE machine_id=$1`,
+      [machineId, JSON.stringify(publicSpin), startedAt + durationMs]);
+      await client.query('COMMIT');
+      res.json({ ...response, serverNow: Date.now() });
     } catch (e) {
       try { await client.query('ROLLBACK'); } catch {}
-      res.status(500).json({ error: e.message });
+      res.status(e.status || 500).json({ error: e.status ? e.message : 'Unable to confirm this spin. Retry the same request.' });
     } finally {
       client.release();
     }

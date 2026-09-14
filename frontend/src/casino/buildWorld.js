@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Reflector } from 'three/examples/jsm/objects/Reflector.js';
 import layout from './worldLayout.json';
 import leaderboardBoard from './leaderboardBoard';
+import liveSlotMachine from './liveSlotMachine';
 import { box, cylinder, group, mesh, sign, plant, couch, floorLamp, pendant, slotMachine, gameTable, car, receptionist as receptionistModel } from './models';
 
 export default function buildWorld(scene) {
@@ -137,12 +138,16 @@ export default function buildWorld(scene) {
   sign(building, 'THE AMBER HOUSE', 7, [2, upper + 3.35, -9.72], { serif: true });
   sign(building, 'GAMES  /  LOUNGE  /  GOOD COMPANY', 5.2, [2, upper + 2.15, -9.7]);
   layout.stations.forEach(s => {
-    if (s.game === 'slots') { slotMachine(building, s.x - 0.85, upper, s.z); slotMachine(building, s.x + 0.85, upper, s.z); block(s.x, s.z, 3.2, 1.15, 2); }
+    if (s.game === 'slots') return;
     else if (s.game === 'crash') { slotMachine(building, s.x, upper, s.z, 'SKYLINE'); block(s.x, s.z, 1.6, 1.15, 2); }
     else { gameTable(building, s.x, upper, s.z, s.game === 'dice'); block(s.x, s.z, 4.25, 2.5, 2); }
     sign(building, s.game.toUpperCase(), 2.3, [s.x, upper + 2.9, s.z - 0.8]);
   });
-  layout.seats.forEach(s => {
+  const liveSlots = layout.slotMachines.map(m => {
+    block(m.x, m.z, 1.94, 1.05, 2);
+    return liveSlotMachine(building, m, upper);
+  });
+  layout.seats.filter(s => s.kind !== 'slot').forEach(s => {
     box(building, [5.9, 0.026, 4.5], '#b08565', [s.x, upper + 0.03, s.z + 0.9]);
     couch(building, s.x, upper, s.z); block(s.x, s.z, 3.95, 1.4, 2);
     const table = cylinder(building, 0.75, 0.75, 0.1, '#ceae7b', [s.x, upper + 0.55, s.z + 2.15], 10);
@@ -151,12 +156,12 @@ export default function buildWorld(scene) {
     table.receiveShadow = true; block(s.x, s.z + 2.15, 1.5, 1.5, 2);
     floorLamp(building, s.x + 2.35, upper, s.z - 0.2); plant(building, s.x - 2.35, upper, s.z - 0.1);
   });
-  plant(building, 12.6, upper, -1, 1.25); plant(building, -8.4, upper, -9, 1.15);
+  plant(building, 12.6, upper, -1, 1.25); plant(building, -3.1, upper, -9, 1.15);
   plant(building, 12.5, upper, 8.6, 1.5);
   // Small golden rings inset in the floor guide players toward the stations.
   const markers = layout.stations.map(s => {
     const m = new THREE.Mesh(new THREE.RingGeometry(0.43, 0.48, 32), new THREE.MeshBasicMaterial({ color: '#e4bc73', side: THREE.DoubleSide, transparent: true, opacity: 0.75 }));
     m.rotation.x = -Math.PI / 2; m.position.set(s.x, upper + 0.07, s.z + 2.5); building.add(m); return m;
   });
-  return { cars, obstacles, markers, mirror, faceButton, leaderboard, receptionist, resetButton };
+  return { cars, obstacles, markers, mirror, faceButton, leaderboard, receptionist, resetButton, liveSlots };
 }

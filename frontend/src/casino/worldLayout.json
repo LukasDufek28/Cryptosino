@@ -7,12 +7,18 @@
   "spawn": { "x": 1, "y": 4.6, "z": 5.1, "yaw": 0.22 },
   "stairs": { "minX": -13.3, "maxX": -9.6, "walkMinX": -12.85, "walkMaxX": -10.05, "bottomZ": 7.5, "topZ": -3.5 },
   "stations": [
-    { "id": "slots", "name": "Golden reels", "game": "slots", "x": -6.4, "z": -7.3, "color": "#dcb36f", "description": "A little luck. A little gold." },
+    { "id": "slots", "name": "Golden reels", "game": "slots", "x": -6.4, "z": -9.15, "color": "#dcb36f", "description": "A little luck. A little gold." },
     { "id": "blackjack", "name": "The twenty-one club", "game": "blackjack", "x": -0.4, "z": -5.5, "color": "#71a796", "description": "Take a seat at the green felt." },
     { "id": "dice", "name": "Lucky pair", "game": "dice", "x": 5.8, "z": -5.5, "color": "#ce916a", "description": "Let the good times roll." },
     { "id": "crash", "name": "Skyline", "game": "crash", "x": 10.8, "z": -7.1, "color": "#a5b8ca", "description": "How high will you go?" }
   ],
+  "slotMachines": [
+    { "id": "amber-joker", "name": "Amber Joker", "variant": "joker", "x": -7.6, "z": -9.15 },
+    { "id": "amber-book", "name": "Amber Book", "variant": "golden", "x": -5.2, "z": -9.15 }
+  ],
   "seats": [
+    { "id": "seat-amber-joker", "name": "Amber Joker", "kind": "slot", "machineId": "amber-joker", "x": -7.6, "z": -7.9, "yaw": 0, "exitX": -7.6, "exitZ": -6.9 },
+    { "id": "seat-amber-book", "name": "Amber Book", "kind": "slot", "machineId": "amber-book", "x": -5.2, "z": -7.9, "yaw": 0, "exitX": -5.2, "exitZ": -6.9 },
     { "id": "window-left", "name": "Window lounge", "x": -5.5, "z": 4.6, "yaw": 3.14159, "exitX": -2.8, "exitZ": 6.2 },
     { "id": "window-right", "name": "Corner lounge", "x": 7.8, "z": 4.6, "yaw": 3.14159, "exitX": 10.5, "exitZ": 6.2 }
   ]
