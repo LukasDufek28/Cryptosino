@@ -39,7 +39,7 @@ export default function liveSlotMachine(parent, machine, floorY) {
         continue;
       }
       if (win.scatter) {
-        visible.forEach((symbols, reel) => symbols.forEach((symbol, row) => {
+        (visible || []).forEach((symbols, reel) => (symbols || []).forEach((symbol, row) => {
           if (symbol === win.symbol) cells.add(`${reel}:${row}`);
         }));
       } else {
@@ -65,7 +65,9 @@ export default function liveSlotMachine(parent, machine, floorY) {
     const held = new Set((activeRound?.heldCells || []).map(cell => `${cell.reel}:${cell.row}`));
     const glow = celebrating ? (Math.sin(now / 170) + 1) / 2 : 0;
     reels.forEach((reel, i) => {
-      const finals = activeRound?.visible?.[i] || (spin ? spin.visible[i] : reel.strip.slice(0, 3));
+      // Persisted pre-0.0.9 Joker spins only contain three reels. Fall back to
+      // this reel's strip until a new five-reel result replaces that old state.
+      const finals = activeRound?.visible?.[i] ?? spin?.visible?.[i] ?? reel.strip.slice(0, 3);
       const rowStates = finals.map((symbol, row) => {
         const stopAt = 2050 + i * 135 + row * 55;
         const isHeld = held.has(`${i}:${row}`);
