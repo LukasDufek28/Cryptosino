@@ -99,7 +99,8 @@ export default function liveSlotMachine(parent, machine, floorY) {
       }
       reel.texture.needsUpdate = true;
     });
-    const text = running ? `${state?.username || spin.username} · ${respinning ? `RESPIN ${roundIndex}/${spinRounds.length - 1}` : 'SPINNING'}`
+    const betText = spin ? `$${Number(spin.bet).toFixed(2)}` : '';
+    const text = running ? `${state?.username || spin.username} · ${respinning ? `RESPIN ${roundIndex}/${spinRounds.length - 1}` : 'SPINNING'} · BET ${betText}`
       : state?.username && state.userId !== spin?.userId ? `${state.username} · SEATED`
         : spin ? `${spin.username} · RETURN $${Number(spin.totalPayout).toFixed(2)}` : state?.username ? `${state.username} · SEATED` : 'TAKE A SEAT · PRESS E';
     if (text !== labelKey) {
