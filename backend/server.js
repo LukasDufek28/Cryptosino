@@ -772,7 +772,7 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // ===================== SLOTS =====================
-// Two variants: 'joker' (3×3, respin mechanic) and 'golden' (5×3, book scatter)
+// Two variants: 'joker' (5×3, 243 ways + chained sticky respins) and 'golden' (5×3, book scatter)
 
 const { SLOTS_CONFIG, spinRound } = require('./slots/math');
 const slotMachines = require('./slots/machines');
@@ -812,7 +812,7 @@ app.post('/api/slots/spin', authMiddleware, async (req, res) => {
         return res.status(400).json({ error: 'Insufficient balance' });
       }
 
-      const { stops, visible, wins, totalPayout, respinInfo, initialVisible } = spinRound({ variant, wager, serverSeed, seed, nonce });
+      const { stops, visible, wins, totalPayout, respinInfo, initialVisible, rounds } = spinRound({ variant, wager, serverSeed, seed, nonce });
 
       const payout = Number(totalPayout.toFixed(2));
       const newBalance = Number((Number(user.balance) - wager + payout).toFixed(2));
@@ -826,12 +826,12 @@ app.post('/api/slots/spin', authMiddleware, async (req, res) => {
         [user.id, `slots_${variant}`, wager, payout, JSON.stringify({ stops, winCount: wins.length, totalPayout: payout, mathVersion: config.mathVersion, requestId, machineId })]
       );
       const startedAt = Date.now();
-      const durationMs = respinInfo ? 6500 : variant === 'golden' ? 5000 : 4000;
+      const durationMs = variant === 'joker' ? Math.max(4000, (rounds?.length || 1) * 4000) : 5000;
       const publicSpin = { id: requestId, machineId: machineId || null, userId: req.user.id, username: req.user.username,
-        variant, startedAt, durationMs, visible, initialVisible, respin: respinInfo, wins, bet: wager,
+        variant, startedAt, durationMs, visible, initialVisible, rounds, respin: respinInfo, wins, bet: wager,
         balanceBefore: Number(user.balance), totalPayout: payout, mathVersion: config.mathVersion };
       const response = {
-        ok: true, stops, visible, wins, initialVisible, mathVersion: config.mathVersion, spin: publicSpin,
+        ok: true, stops, visible, wins, initialVisible, rounds, mathVersion: config.mathVersion, spin: publicSpin,
         totalPayout: payout.toFixed(2),
         newBalance: newBalance.toFixed(2),
         respin: respinInfo,

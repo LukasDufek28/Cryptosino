@@ -1,173 +1,29 @@
 {
   "joker": {
     "reels": [
-      [
-        "JOKER",
-        "CHERRY",
-        "7",
-        "WATER",
-        "BELL",
-        "CHERRY",
-        "BAR",
-        "WATER",
-        "7",
-        "BELL",
-        "WATER",
-        "CHERRY",
-        "BAR",
-        "BELL",
-        "WATER",
-        "JOKER",
-        "CHERRY",
-        "WATER",
-        "BELL",
-        "7",
-        "BAR",
-        "WATER",
-        "CHERRY",
-        "BELL",
-        "WATER",
-        "BAR",
-        "CHERRY",
-        "BELL",
-        "7",
-        "WATER"
-      ],
-      [
-        "BELL",
-        "7",
-        "CHERRY",
-        "WATER",
-        "JOKER",
-        "BELL",
-        "WATER",
-        "BAR",
-        "CHERRY",
-        "BELL",
-        "7",
-        "WATER",
-        "CHERRY",
-        "BELL",
-        "BAR",
-        "WATER",
-        "JOKER",
-        "CHERRY",
-        "BELL",
-        "WATER",
-        "7",
-        "BAR",
-        "BELL",
-        "WATER",
-        "CHERRY",
-        "7",
-        "BELL",
-        "BAR",
-        "WATER",
-        "CHERRY"
-      ],
-      [
-        "7",
-        "WATER",
-        "BELL",
-        "CHERRY",
-        "BAR",
-        "WATER",
-        "JOKER",
-        "BELL",
-        "WATER",
-        "CHERRY",
-        "7",
-        "BELL",
-        "WATER",
-        "BAR",
-        "CHERRY",
-        "WATER",
-        "BELL",
-        "7",
-        "CHERRY",
-        "WATER",
-        "JOKER",
-        "BAR",
-        "WATER",
-        "CHERRY",
-        "BELL",
-        "7",
-        "WATER",
-        "BAR",
-        "CHERRY",
-        "BELL"
-      ]
+      ["CHERRY","LEMON","ORANGE","PLUM","GRAPES","CHERRY","MELON","LEMON","ORANGE","CHERRY","PLUM","BELL","LEMON","GRAPES","CHERRY","ORANGE","MELON","PLUM","LEMON","JOKER","CHERRY","GRAPES","ORANGE","LEMON","PLUM","MELON","CHERRY","ORANGE","LEMON","GRAPES","CHERRY","PLUM"],
+      ["LEMON","CHERRY","PLUM","ORANGE","MELON","LEMON","GRAPES","CHERRY","ORANGE","PLUM","LEMON","BELL","CHERRY","MELON","ORANGE","LEMON","GRAPES","PLUM","CHERRY","JOKER","LEMON","ORANGE","CHERRY","GRAPES","PLUM","MELON","LEMON","CHERRY","ORANGE","PLUM","LEMON","GRAPES"],
+      ["ORANGE","PLUM","CHERRY","LEMON","GRAPES","ORANGE","MELON","CHERRY","PLUM","LEMON","ORANGE","BELL","CHERRY","GRAPES","LEMON","PLUM","MELON","ORANGE","CHERRY","JOKER","PLUM","LEMON","GRAPES","CHERRY","ORANGE","MELON","PLUM","LEMON","CHERRY","ORANGE","GRAPES","LEMON"],
+      ["PLUM","ORANGE","LEMON","CHERRY","MELON","PLUM","GRAPES","ORANGE","CHERRY","LEMON","PLUM","BELL","ORANGE","MELON","CHERRY","PLUM","GRAPES","LEMON","ORANGE","JOKER","CHERRY","PLUM","LEMON","GRAPES","ORANGE","MELON","CHERRY","LEMON","PLUM","ORANGE","CHERRY","GRAPES"],
+      ["CHERRY","PLUM","ORANGE","LEMON","GRAPES","CHERRY","MELON","PLUM","LEMON","ORANGE","CHERRY","BELL","PLUM","GRAPES","LEMON","CHERRY","MELON","ORANGE","PLUM","JOKER","LEMON","CHERRY","ORANGE","GRAPES","PLUM","MELON","LEMON","ORANGE","CHERRY","PLUM","LEMON","GRAPES"]
     ],
     "rows": 3,
-    "paylines": [
-      [
-        0,
-        0,
-        0
-      ],
-      [
-        1,
-        1,
-        1
-      ],
-      [
-        2,
-        2,
-        2
-      ],
-      [
-        0,
-        1,
-        2
-      ],
-      [
-        2,
-        1,
-        0
-      ]
-    ],
+    "paylines": [],
+    "ways": 243,
+    "waysBetDivisor": 39,
     "wild": "JOKER",
     "scatter": null,
     "paytable": {
-      "7": [
-        0,
-        0,
-        0,
-        25
-      ],
-      "JOKER": [
-        0,
-        0,
-        0,
-        170
-      ],
-      "BAR": [
-        0,
-        0,
-        0,
-        16
-      ],
-      "BELL": [
-        0,
-        0,
-        0,
-        9
-      ],
-      "WATER": [
-        0,
-        0,
-        0,
-        6
-      ],
-      "CHERRY": [
-        0,
-        0,
-        0,
-        6
-      ]
+      "CHERRY": [0, 0, 0, 0.5, 1, 2],
+      "LEMON": [0, 0, 0, 0.5, 1, 2],
+      "ORANGE": [0, 0, 0, 1, 2, 4],
+      "PLUM": [0, 0, 0, 1, 2, 4],
+      "GRAPES": [0, 0, 0, 2, 4, 8],
+      "MELON": [0, 0, 0, 2, 4, 8],
+      "BELL": [0, 0, 0, 5, 10, 50]
     },
-    "name": "Amber Joker",
-    "mathVersion": "amber-v2",
+    "name": "Respin Joker 243",
+    "mathVersion": "respin-joker-243-v1",
     "targetRtpPercent": 96,
     "custom": true
   },

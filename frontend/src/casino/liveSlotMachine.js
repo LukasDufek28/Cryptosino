@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import configs from '../slots/config.json';
 import { box, group, sign, stool } from './models';
 
-const icons = { JOKER: '🃏', '7': '🍊', BAR: '🍇', BELL: '🔔', WATER: '🍋', CHERRY: '🍒', BOOK: 'BOOK', SCARAB: '◆', ACE: 'A', KING: 'K', QUEEN: 'Q', JACK: 'J', TEN: '10' };
-const colors = { JOKER: '#d09ade', '7': '#e36f62', BAR: '#8cafdc', BELL: '#e0b55d', WATER: '#79b992', CHERRY: '#dd7180', BOOK: '#dfbd70', SCARAB: '#72b9a7', ACE: '#e3c887', KING: '#d6bd83', QUEEN: '#d6bd83', JACK: '#d6bd83', TEN: '#d6bd83' };
+const icons = { JOKER: '🃏', CHERRY: '🍒', LEMON: '🍋', ORANGE: '🍊', PLUM: '🟣', GRAPES: '🍇', MELON: '🍉', BELL: '🔔', BOOK: 'BOOK', SCARAB: '◆', ACE: 'A', KING: 'K', QUEEN: 'Q', JACK: 'J', TEN: '10' };
+const colors = { JOKER: '#d09ade', CHERRY: '#dd7180', LEMON: '#e8cf67', ORANGE: '#e98d55', PLUM: '#ad72c7', GRAPES: '#9474c8', MELON: '#70b88b', BELL: '#e0b55d', BOOK: '#dfbd70', SCARAB: '#72b9a7', ACE: '#e3c887', KING: '#d6bd83', QUEEN: '#d6bd83', JACK: '#d6bd83', TEN: '#d6bd83' };
 export default function liveSlotMachine(parent, machine, floorY) {
   const config = configs[machine.variant], g = group(parent, machine.x, floorY, machine.z);
   box(g, [1.85, 2.22, 0.9], '#284b42', [0, 1.11, 0]);
@@ -31,11 +31,15 @@ export default function liveSlotMachine(parent, machine, floorY) {
   });
   let state = null, clockAt = 0, serverAt = 0, labelKey = '';
   function update(value, serverNow) { state = value; clockAt = performance.now(); serverAt = serverNow; }
-  function winningCells(spin) {
+  function winningCells(spin, wins = spin?.wins, visible = spin?.visible) {
     const cells = new Set();
-    for (const win of spin?.wins || []) {
+    for (const win of wins || []) {
+      if (win.cells) {
+        win.cells.forEach(({ reel, row }) => cells.add(`${reel}:${row}`));
+        continue;
+      }
       if (win.scatter) {
-        spin.visible.forEach((symbols, reel) => symbols.forEach((symbol, row) => {
+        visible.forEach((symbols, reel) => symbols.forEach((symbol, row) => {
           if (symbol === win.symbol) cells.add(`${reel}:${row}`);
         }));
       } else {
@@ -49,33 +53,39 @@ export default function liveSlotMachine(parent, machine, floorY) {
     const spin = state?.spin;
     const elapsed = spin ? Math.max(0, serverAt + now - clockAt - spin.startedAt) : Infinity;
     const running = spin && elapsed < spin.durationMs;
-    const respinning = spin?.respin && elapsed >= 3300;
+    const roundLength = 4000;
+    const spinRounds = spin?.rounds?.length ? spin.rounds : spin ? [{ visible: spin.visible, wins: spin.wins, heldCells: [] }] : [];
+    const roundIndex = spinRounds.length ? Math.min(spinRounds.length - 1, Math.floor(elapsed / roundLength)) : 0;
+    const activeRound = spinRounds[roundIndex];
+    const roundElapsed = elapsed - roundIndex * roundLength;
+    const respinning = running && roundIndex > 0;
     const celebrating = spin && !running && elapsed < spin.durationMs + 5000 && Number(spin.totalPayout) > 0;
-    const wins = celebrating ? winningCells(spin) : new Set();
+    const revealRoundWin = running && roundElapsed >= 3000;
+    const wins = celebrating ? winningCells(spin, activeRound?.wins, activeRound?.visible) : revealRoundWin ? winningCells(spin, activeRound?.wins, activeRound?.visible) : new Set();
+    const held = new Set((activeRound?.heldCells || []).map(cell => `${cell.reel}:${cell.row}`));
     const glow = celebrating ? (Math.sin(now / 170) + 1) / 2 : 0;
     reels.forEach((reel, i) => {
-      const locked = respinning && spin.respin.lockedReels.includes(i);
-      const finals = spin ? (spin.respin && !respinning ? spin.initialVisible[i] : spin.visible[i]) : reel.strip.slice(0, 3);
-      const phaseTime = respinning ? elapsed - 3300 : elapsed;
-      const stopAt = respinning ? 1900 + i * 180 : 2000 + i * 240;
-      const rolling = running && !locked && phaseTime < stopAt;
-      const offset = rolling ? Math.max(0, stopAt - phaseTime) / 70 : 0;
-      // Staggered stops and a small damped bounce finish on the server's symbols.
-      const bounceAge = phaseTime - stopAt;
-      const bounce = !rolling && running && bounceAge >= 0 && bounceAge < 300 ? Math.sin(bounceAge / 35) * Math.exp(-bounceAge / 90) * 12 : 0;
-      const key = `${finals.join(',')}:${Math.floor(offset * 12)}:${Math.round(bounce)}:${celebrating ? Math.floor(now / 90) : 0}`;
+      const finals = activeRound?.visible?.[i] || (spin ? spin.visible[i] : reel.strip.slice(0, 3));
+      const rowStates = finals.map((symbol, row) => {
+        const stopAt = 2050 + i * 135 + row * 55;
+        const isHeld = held.has(`${i}:${row}`);
+        const rolling = running && !isHeld && roundElapsed < stopAt;
+        const cycle = Math.floor(Math.max(0, stopAt - roundElapsed) / 72);
+        return { symbol: rolling ? reel.strip[(cycle + row * 3 + i) % reel.strip.length] : symbol, rolling, isHeld };
+      });
+      const key = `${rowStates.map(s => `${s.symbol}:${s.rolling}:${s.isHeld}`).join(',')}:${celebrating || revealRoundWin ? Math.floor(now / 90) : 0}`;
       if (reel.key === key) return;
       reel.key = key;
       const ctx = reel.ctx; ctx.fillStyle = '#172a24'; ctx.fillRect(0, 0, 192, 576);
-      const step = 192, shift = (offset % 1) * step + bounce;
-      for (let row = -1; row < 4; row++) {
-        const symbol = rolling && offset > 1 ? reel.strip[(Math.floor(offset) + row + reel.strip.length) % reel.strip.length] : finals[Math.max(0, Math.min(2, row))];
-        const y = row * step + 96 + shift;
-        const isWin = !rolling && row >= 0 && row < 3 && wins.has(`${i}:${row}`);
+      for (let row = 0; row < 3; row++) {
+        const { symbol, rolling, isHeld } = rowStates[row];
+        const y = row * 192 + 96;
+        const isWin = !rolling && wins.has(`${i}:${row}`);
         ctx.fillStyle = isWin ? `rgba(215, 174, 91, ${0.16 + glow * 0.2})` : row % 2 ? '#1c3029' : '#20372f';
         ctx.fillRect(8, y - 86, 176, 172);
+        if (isHeld) { ctx.strokeStyle = '#f0c86e'; ctx.lineWidth = 5; ctx.strokeRect(10, y - 84, 172, 168); }
         ctx.fillStyle = colors[symbol] || '#364d65'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        const fruitStyle = ['JOKER', '7', 'BAR', 'BELL', 'WATER', 'CHERRY'].includes(symbol);
+        const fruitStyle = ['JOKER', 'CHERRY', 'LEMON', 'ORANGE', 'PLUM', 'GRAPES', 'MELON', 'BELL'].includes(symbol);
         ctx.font = fruitStyle ? `${rolling ? 52 : 60}px "Segoe UI Emoji", "Apple Color Emoji", sans-serif`
           : `bold ${symbol === 'BOOK' ? 30 : rolling ? 56 : 64}px Georgia`;
         ctx.globalAlpha = rolling ? 0.72 : 1;
@@ -87,7 +97,7 @@ export default function liveSlotMachine(parent, machine, floorY) {
       }
       reel.texture.needsUpdate = true;
     });
-    const text = running ? `${state?.username || spin.username} · ${respinning ? 'RESPIN' : 'SPINNING'}`
+    const text = running ? `${state?.username || spin.username} · ${respinning ? `RESPIN ${roundIndex}/${spinRounds.length - 1}` : 'SPINNING'}`
       : state?.username && state.userId !== spin?.userId ? `${state.username} · SEATED`
         : spin ? `${spin.username} · RETURN $${Number(spin.totalPayout).toFixed(2)}` : state?.username ? `${state.username} · SEATED` : 'TAKE A SEAT · PRESS E';
     if (text !== labelKey) {

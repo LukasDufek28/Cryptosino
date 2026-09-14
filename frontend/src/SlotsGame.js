@@ -10,11 +10,13 @@ const API_URL = process.env.REACT_APP_API_URL || '';
 const SYMBOL_DEFS = {
   joker: {
     JOKER:  { icon: '🃏', label: 'JOKER',  color: '#f0b429' },
-    '7':    { icon: '7',  label: '7',       color: '#ef4444' },
-    BAR:    { icon: 'BAR',label: 'BAR',     color: '#60a5fa' },
     BELL:   { icon: '🔔', label: 'BELL',   color: '#fbbf24' },
-    WATER:  { icon: '🍉', label: 'MELON',  color: '#10b981' },
     CHERRY: { icon: '🍒', label: 'CHERRY', color: '#f87171' },
+    LEMON:  { icon: '🍋', label: 'LEMON',  color: '#facc15' },
+    ORANGE: { icon: '🍊', label: 'ORANGE', color: '#fb923c' },
+    PLUM:   { icon: '🟣', label: 'PLUM',   color: '#c084fc' },
+    GRAPES: { icon: '🍇', label: 'GRAPES', color: '#a78bfa' },
+    MELON:  { icon: '🍉', label: 'MELON',  color: '#10b981' },
   },
   golden: {
     BOOK:   { icon: '📖', label: 'BOOK',   color: '#f0b429' },
@@ -33,7 +35,7 @@ const PAYTABLE = Object.fromEntries(Object.entries(configs).map(([variant, confi
 
 // Payline definitions (mirror of server) for client-side win highlighting
 const PAYLINES_CLIENT = {
-  joker:  [[0,0,0],[1,1,1],[2,2,2],[0,1,2],[2,1,0]],
+  joker:  [],
   golden: [
     [1,1,1,1,1],[0,0,0,0,0],[2,2,2,2,2],
     [0,1,2,1,0],[2,1,0,1,2],
@@ -43,7 +45,7 @@ const PAYLINES_CLIENT = {
   ],
 };
 
-const NUM_REELS    = { joker: 3, golden: 5 };
+const NUM_REELS    = { joker: 5, golden: 5 };
 const CELL_H       = 72;    // px – one symbol cell height
 const LOOP_ROWS    = 22;    // random rows above the result in the strip
 const SPIN_PX      = 20;    // px moved per animation frame (~1200 px/s @60fps)
@@ -255,6 +257,13 @@ export default function SlotsGame({ balance, setBalance, token }) {
   const buildWinCells = useCallback((res, v) => {
     const cells = {};
     (res.wins || []).forEach(w => {
+      if (w.cells) {
+        w.cells.forEach(({ reel, row }) => {
+          if (!cells[reel]) cells[reel] = new Set();
+          cells[reel].add(row);
+        });
+        return;
+      }
       if (w.line < 0) return;
       const pl = PAYLINES_CLIENT[v][w.line];
       if (!pl) return;
@@ -307,7 +316,6 @@ export default function SlotsGame({ balance, setBalance, token }) {
       ]);
       result = data;
       pendingRequest.current = null; setRecovering(false);
-      setBalance(Number(result.newBalance));
     } catch (e) {
       if (e.status >= 400 && e.status < 500) pendingRequest.current = null;
       setRecovering(Boolean(pendingRequest.current));
@@ -348,6 +356,7 @@ export default function SlotsGame({ balance, setBalance, token }) {
 
     function showResult(res, v) {
       // Apply final balance only now — winnings land with the reels
+      setBalance(Number(res.newBalance));
       setOutcome(res);
       setWinCells(buildWinCells(res, v));
       setLockedReels(new Set());
@@ -469,7 +478,7 @@ export default function SlotsGame({ balance, setBalance, token }) {
         </button>
         {showPaytable && (
           <div className="slots-pt">
-            <div className="slots-pt-header"><span>Symbol</span><span>Payouts (× bet per line)</span></div>
+            <div className="slots-pt-header"><span>Symbol</span><span>Payouts (× ways/line unit)</span></div>
             {PAYTABLE[variant].map(row => {
               const def = SYMBOL_DEFS[variant][row.symbol];
               return (
@@ -486,9 +495,9 @@ export default function SlotsGame({ balance, setBalance, token }) {
             })}
             {variant === 'joker' && (
               <p className="slots-pt-note">
-                🃏 JOKER is wild on all lines.<br />
-                JOKER on the centre row locks it — other reels get a <b>free respin</b>! The final respin replaces the initial award.<br />
-                Custom rules · measured return 95.71% in a 1,000,000-round audit; not provider-certified RTP.
+                🃏 JOKER substitutes for every fruit across all 243 ways.<br />
+                A win containing a new Joker sticks its full combination and grants another <b>free respin</b>. All round awards are added together.<br />
+                Server-authoritative custom implementation; not provider-certified math.
               </p>
             )}
             {variant === 'golden' && (
