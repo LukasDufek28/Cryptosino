@@ -15,7 +15,7 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance) {
     if (!ready) return undefined;
     const scene = sceneRef.current, sessionId = crypto.randomUUID();
     let stopped = false, active = null, claiming = false, pending = null, sending = false;
-    let polling = false, refreshing = false, heartbeatAt = 0, endAt = 0, resultText = '', pendingBalance = null;
+    let polling = false, refreshing = false, heartbeatAt = 0, endAt = 0, resultText = '', pendingBalance = null, messageTimer = null;
     let machines = [];
     const controllers = new Set();
     const request = async (path, method = 'GET', body) => {
@@ -69,12 +69,20 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance) {
         }
       } finally { refreshing = false; }
     }
+    const showResultMessage = text => {
+      if (messageTimer) clearTimeout(messageTimer);
+      setMessage(text);
+      messageTimer = setTimeout(() => { messageTimer = null; setMessage(''); }, 3000);
+    };
+    const clearMessageTimer = () => {
+      if (messageTimer) { clearTimeout(messageTimer); messageTimer = null; }
+    };
     actions.current = {
       async claim(id) {
         if (claiming || sending || pending || stopped || !token) return;
         if (active === id) return;
         if (active) { setMessage('Stand up before changing machines.'); return; }
-        claiming = true; setMessage('Reserving machine…');
+        claiming = true; clearMessageTimer(); setMessage('Reserving machine…');
         try {
           await request(`/api/casino/slots/${id}/claim`, 'POST', { sessionId });
           if (stopped) return;
@@ -87,6 +95,7 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance) {
       },
       async spin(wager) {
         if (stopped || sending || (!pending && (!active || performance.now() < endAt))) return;
+        clearMessageTimer();
         const machine = layout.slotMachines.find(m => m.id === active);
         if (!pending) {
           const amount = Number(wager);
@@ -108,7 +117,7 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance) {
           pendingBalance = Number(result.newBalance);
           resultText = `Return $${Number(spin.totalPayout).toFixed(2)} (stake $${Number(spin.bet).toFixed(2)}).`;
           if (spin.startedAt + spin.durationMs <= serverNow) {
-            endAt = 0; setBalance(pendingBalance); pendingBalance = null; setBusy(false); setMessage(resultText);
+            endAt = 0; setBalance(pendingBalance); pendingBalance = null; setBusy(false); showResultMessage(resultText);
           } else setMessage('Reels spinning…');
           scene.notifySlotChange(); void refresh();
         } catch (error) {
@@ -120,7 +129,7 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance) {
         } finally { sending = false; }
       },
       stand() { if (!sending && !pending) { scene.stand(); release(); } },
-      dismiss() { setMessage(''); }
+      dismiss() { clearMessageTimer(); setMessage(''); }
     };
     const tick = setInterval(() => {
       if (active && scene.pose().seatId !== `seat-${active}`) release();
@@ -128,14 +137,14 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance) {
       if (!sending && !pending && endAt && performance.now() >= endAt) {
         endAt = 0;
         if (pendingBalance !== null) { setBalance(pendingBalance); pendingBalance = null; }
-        setBusy(false); setMessage(resultText);
+        setBusy(false); showResultMessage(resultText);
       }
       void refresh();
     }, 1000);
     scene.setSlotRefresh(refresh); void refresh();
     window.addEventListener('pagehide', release);
     return () => {
-      stopped = true; clearInterval(tick); controllers.forEach(c => c.abort());
+      stopped = true; clearInterval(tick); if (messageTimer) clearTimeout(messageTimer); controllers.forEach(c => c.abort());
       scene.setSlotRefresh(null); window.removeEventListener('pagehide', release);
       scene.stand(); release(); actions.current = {}; setSelected(null); setMessage(''); setRetry(false); setBusy(false);
     };

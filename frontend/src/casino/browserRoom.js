@@ -44,6 +44,7 @@ export default function browserRoom(token, scene, onStatus) {
       role: connected ? isHost() ? 'host' : 'guest' : 'connecting', message,
       players: active() ? [...roster.values()].map(member => ({
         id: member.id, username: member.username, balance: member.balance, version: member.version || 'legacy',
+        isAdmin: Boolean(member.is_admin), isOwner: Boolean(member.is_owner),
         isSelf: member.sessionId === sessionId, isHost: member.sessionId === host
       })) : [] };
     const key = JSON.stringify(state);

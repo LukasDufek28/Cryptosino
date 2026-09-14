@@ -53,7 +53,7 @@ module.exports = function casinoRouter(authMiddleware) {
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (room_id,user_id) DO UPDATE SET
         x=EXCLUDED.x,y=EXCLUDED.y,z=EXCLUDED.z,yaw=EXCLUDED.yaw,seat_id=EXCLUDED.seat_id,face_seed=EXCLUDED.face_seed,updated_at=NOW()`,
       [world.id, req.user.id, seat ? seat.x : x, y, seat ? seat.z : z, seat ? seat.yaw : yaw, seatId, faceSeed]);
-      const peers = await client.query(`SELECT p.user_id AS id,u.username,p.x,p.y,p.z,p.yaw,p.seat_id AS "seatId",p.face_seed AS "faceSeed"
+      const peers = await client.query(`SELECT p.user_id AS id,u.username,u.is_admin,COALESCE(u.is_owner,FALSE) AS is_owner,p.x,p.y,p.z,p.yaw,p.seat_id AS "seatId",p.face_seed AS "faceSeed"
         FROM casino_presence p JOIN users u ON u.id=p.user_id WHERE room_id=$1 AND user_id<>$2`, [world.id, req.user.id]);
       await client.query('COMMIT');
       res.json({ roomId: world.id, players: peers.rows, capacity: world.capacity });
