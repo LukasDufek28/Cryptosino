@@ -27,7 +27,7 @@ export function sign(parent, text, width, position, options = {}) {
   ctx.fillStyle = options.background || '#23463e'; ctx.fillRect(0, 0, 1024, 256);
   ctx.strokeStyle = options.color || '#edd4a2'; ctx.lineWidth = 4; ctx.strokeRect(12, 12, 1000, 232);
   ctx.fillStyle = options.color || '#edd4a2'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.font = `${options.serif ? '' : '600 '}70px ${options.serif ? 'Georgia' : 'sans-serif'}`;
+  ctx.font = `${options.serif ? '' : '600 '}${options.fontSize || 70}px ${options.serif ? 'Georgia' : 'sans-serif'}`;
   ctx.fillText(text, 512, 130, 930);
   const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace;
   const panel = new THREE.Mesh(new THREE.PlaneGeometry(width, width / 4), new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide }));

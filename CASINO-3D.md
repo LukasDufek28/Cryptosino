@@ -72,7 +72,9 @@ authenticated discovery, host election, leases, and WebRTC SDP exchange.
 `usePresence.js` owns the transport lifecycle. Room names and balances in the Tab
 list come from authenticated backend responses, never untrusted peer packets.
 `frontend/src/casino/version.json` is the single casino patch version. Bump it
-with each shipped patch; the HUD and HTTP room roster use the same value.
+with each shipped patch; the HUD and HTTP room roster use the same value. The
+repository `AGENTS.md` requires Codex to increment it for every casino commit
+and include the new number in the commit subject, including for small changes.
 
 ## Browser-hosted rooms
 
