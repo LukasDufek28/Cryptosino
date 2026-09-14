@@ -339,7 +339,12 @@ export default function createScene(host, events) {
     home,
     pose() { return { x: pos.x, z: pos.z, yaw, floor, jumpHeight, revision: poseRevision, seatId: seat?.id || null, faceSeed: visitFaceSeed }; },
     peerCount() { return peers.size; },
-    updateLeaderboard(data) { if (!disposed) { world.leaderboard.update(data); world.peakLeaderboard.update(data.peak || {}); } },
+    updateLeaderboard(data) {
+      if (!disposed) {
+        world.leaderboard.update(data);
+        world.peakLeaderboard.update({ ...data.peak, message: data.message, updatedAt: data.updatedAt });
+      }
+    },
     setChatSender(sender) { chatSender = sender; },
     chat(message) {
       const text = String(message || '').trim().slice(0, 100);
