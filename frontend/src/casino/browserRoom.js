@@ -3,9 +3,18 @@ import casinoVersion from './version.json';
 
 const API = process.env.REACT_APP_API_URL || '';
 const TICK_MS = 30;
-const MAX_BUFFER = 32768;
+const MAX_BUFFER = 262144;
 const validSequence = n => Number.isSafeInteger(n) && n >= 0;
 const cleanChat = value => typeof value === 'string' && value.trim().length > 0 && value.length <= 100 ? value.trim() : null;
+const slotMachine = id => layout.slotMachines.find(machine => machine.id === id);
+const cleanSlotSpin = (spin, member, machine) => {
+  if (!spin || typeof spin !== 'object' || spin.machineId !== machine.id || spin.variant !== machine.variant ||
+      spin.userId !== member.id || spin.username !== member.username || typeof spin.id !== 'string' ||
+      !Number.isFinite(spin.startedAt) || !Number.isFinite(spin.durationMs) || spin.durationMs < 1000 || spin.durationMs > 65000 ||
+      !Number.isFinite(Number(spin.bet)) || !Number.isFinite(Number(spin.totalPayout)) || !Number.isFinite(Number(spin.balanceBefore)) ||
+      !Array.isArray(spin.visible) || spin.visible.length !== 5 || spin.visible.some(reel => !Array.isArray(reel) || reel.length !== 3)) return null;
+  return spin;
+};
 
 // Cosmetic world state only. Never accept wallet, bet or payout messages here.
 function cleanPose(p) {
@@ -26,6 +35,7 @@ function cleanPose(p) {
 export default function browserRoom(token, scene, onStatus) {
   const sessionId = window.crypto.randomUUID();
   const links = new Map(), states = new Map();
+  const slotMachines = new Map(), slotRequests = new Map();
   let roster = new Map(), host = null, generation = 0, selfId = null;
   let stopped = false, timer, controller, inSync = false;
   let outbox = [], ack = '0', lastSync = 0, packetSeq = 0, snapshotSeq = -1;
@@ -33,6 +43,7 @@ export default function browserRoom(token, scene, onStatus) {
   let worldAnchor = 0, worldAt = performance.now(), worldReady = false;
   let lastSnapshot = 0, lastUI = 0, lastEventRevision = -1;
   let lastChatAt = 0;
+  let slotServerOffset = 0;
   const isHost = () => host === sessionId;
   const worldSeconds = () => worldAnchor + (performance.now() - worldAt) / 1000;
   const active = () => !stopped && lastSync > 0 && performance.now() - lastSync < 10000;
@@ -43,7 +54,12 @@ export default function browserRoom(token, scene, onStatus) {
     const state = { mode: connected ? 'shared' : 'solo', count: Math.max(1, count),
       role: connected ? isHost() ? 'host' : 'guest' : 'connecting', message,
       players: active() ? [...roster.values()].map(member => ({
-        id: member.id, username: member.username, balance: member.balance, version: member.version || 'legacy',
+        id: member.id, username: member.username,
+        balance: (() => {
+          const activeSpin = [...slotMachines.values()].find(machine => machine.spin?.userId === member.id &&
+            machine.spin.startedAt + machine.spin.durationMs > Date.now() + slotServerOffset);
+          return activeSpin?.spin?.balanceBefore ?? member.balance;
+        })(), version: member.version || 'legacy',
         isAdmin: Boolean(member.is_admin), isOwner: Boolean(member.is_owner),
         isSelf: member.sessionId === sessionId, isHost: member.sessionId === host
       })) : [] };
@@ -67,6 +83,81 @@ export default function browserRoom(token, scene, onStatus) {
     if (channel?.readyState !== 'open' || channel.bufferedAmount > MAX_BUFFER) return false;
     try { channel.send(JSON.stringify(packet)); return true; } catch { return false; }
   }
+  function slotState() {
+    return { machines: layout.slotMachines.map(machine => slotMachines.get(machine.id) || { id: machine.id }),
+      serverNow: Date.now() + slotServerOffset };
+  }
+  function applySlotState(value) {
+    if (!value || !Array.isArray(value.machines) || value.machines.length > layout.slotMachines.length || !Number.isFinite(value.serverNow)) return;
+    slotServerOffset = value.serverNow - Date.now();
+    slotMachines.clear();
+    for (const state of value.machines) {
+      const machine = state && slotMachine(state.id);
+      if (!machine) continue;
+      const occupant = roster.get(state.sessionId);
+      const spinMember = [...roster.values()].find(member => member.id === state.spin?.userId);
+      const spin = spinMember ? cleanSlotSpin(state.spin, spinMember, machine) : null;
+      slotMachines.set(machine.id, { id: machine.id,
+        ...(occupant && occupant.id === state.userId && occupant.username === state.username
+          ? { sessionId: state.sessionId, userId: occupant.id, username: occupant.username } : {}),
+        spin });
+    }
+    scene.receiveSlotState(slotState()); status();
+  }
+  function publishSlotState(target = null) {
+    if (!isHost()) return;
+    const value = slotState();
+    scene.receiveSlotState(value); status();
+    const packet = { type: 'slotState', generation, ...value };
+    if (target) send(links.get(target)?.events, packet);
+    else for (const link of links.values()) send(link.events, packet);
+  }
+  function pruneSlotOccupants() {
+    let changed = false;
+    for (const [id, state] of slotMachines) {
+      if (state.sessionId && !roster.has(state.sessionId)) {
+        slotMachines.set(id, { id, spin: state.spin || null }); changed = true;
+      }
+    }
+    if (changed) publishSlotState();
+  }
+  function handleSlotCommand(sender, packet) {
+    const member = roster.get(sender);
+    if (!member) return { ok: false, error: 'Unknown lobby member.' };
+    if (packet.action === 'sync') { publishSlotState(); return { ok: true, state: slotState() }; }
+    const machine = slotMachine(packet.machineId);
+    if (!machine) return { ok: false, error: 'Unknown slot machine.' };
+    const current = slotMachines.get(machine.id);
+    if (packet.action === 'claim') {
+      if (current?.sessionId && current.sessionId !== sender) return { ok: false, error: 'Someone is already using this machine.' };
+      if ([...slotMachines.values()].some(state => state.id !== machine.id && state.sessionId === sender)) return { ok: false, error: 'Stand up from your other machine first.' };
+      slotMachines.set(machine.id, { id: machine.id, userId: member.id, username: member.username, sessionId: sender, spin: current?.spin || null });
+    } else if (packet.action === 'release') {
+      if (current?.sessionId === sender) slotMachines.set(machine.id, { id: machine.id, spin: current.spin || null });
+    } else if (packet.action === 'spin') {
+      if (current?.sessionId !== sender) return { ok: false, error: 'Sit at this machine again before spinning.' };
+      const spin = cleanSlotSpin(packet.spin, member, machine);
+      if (!spin) return { ok: false, error: 'Invalid shared spin result.' };
+      if (Number.isFinite(packet.serverNow)) slotServerOffset = packet.serverNow - Date.now();
+      slotMachines.set(machine.id, { ...current, spin });
+    } else return { ok: false, error: 'Invalid slot command.' };
+    publishSlotState();
+    return { ok: true, state: slotState() };
+  }
+  function requestSlot(action, payload = {}) {
+    if (!active()) return Promise.reject(new Error('Lobby host is not connected.'));
+    const packet = { ...payload, type: 'slotCommand', generation, requestId: window.crypto.randomUUID(), action };
+    if (isHost()) return Promise.resolve(handleSlotCommand(sessionId, packet)).then(result => {
+      if (!result.ok) throw new Error(result.error); return result;
+    });
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => { slotRequests.delete(packet.requestId); reject(new Error('Lobby host did not answer.')); }, 5000);
+      slotRequests.set(packet.requestId, { resolve, reject, timeout });
+      if (!send(links.get(host)?.events, packet)) {
+        clearTimeout(timeout); slotRequests.delete(packet.requestId); reject(new Error('Lobby host is reconnecting.'));
+      }
+    });
+  }
   function rejectSeat(id, pose) {
     const packet = { type: 'seatRejected', generation, seatId: pose.seatId, revision: pose.revision };
     if (id === sessionId) scene.rejectSeat(packet.seatId, packet.revision);
@@ -88,7 +179,7 @@ export default function browserRoom(token, scene, onStatus) {
     }));
   }
   function receive(link, raw) {
-    if (!active() || links.get(link.id) !== link || typeof raw !== 'string' || raw.length > 24576) return;
+    if (!active() || links.get(link.id) !== link || typeof raw !== 'string' || raw.length > 196608) return;
     const now = performance.now();
     if (now - link.rateAt > 1000) { link.rateAt = now; link.received = 0; }
     if (++link.received > 150) return;
@@ -96,11 +187,10 @@ export default function browserRoom(token, scene, onStatus) {
     try { packet = JSON.parse(raw); } catch { return; }
     if (!packet || packet.generation !== generation) return;
     link.lastReceived = now;
-    if (packet.type === 'slotChanged') {
-      if ((!isHost() && link.id !== host) || now - (link.lastSlotHintAt || 0) < 500) return;
-      link.lastSlotHintAt = now;
-      scene.refreshSlots();
-      if (isHost()) for (const [id, peer] of links) if (id !== link.id) send(peer.events, { type: 'slotChanged', generation });
+    if (packet.type === 'slotChanged') return; // Pre-hosted-slot clients.
+    if (isHost() && packet.type === 'slotCommand') {
+      const result = handleSlotCommand(link.id, packet);
+      send(link.events, { type: 'slotReply', generation, requestId: packet.requestId, ...result });
       return;
     }
     if (isHost()) {
@@ -117,6 +207,15 @@ export default function browserRoom(token, scene, onStatus) {
       return;
     }
     if (link.id !== host) return;
+    if (packet.type === 'slotState') { applySlotState(packet); return; }
+    if (packet.type === 'slotReply') {
+      const pending = slotRequests.get(packet.requestId);
+      if (!pending) return;
+      clearTimeout(pending.timeout); slotRequests.delete(packet.requestId);
+      if (packet.ok) { if (packet.state) applySlotState(packet.state); pending.resolve(packet); }
+      else pending.reject(new Error(packet.error || 'Slot request was rejected.'));
+      return;
+    }
     if (packet.type === 'chat') {
       const text = cleanChat(packet.text), member = roster.get(packet.sender);
       if (text && member && packet.sender !== sessionId) scene.showPeerChat(member.id, text);
@@ -148,7 +247,7 @@ export default function browserRoom(token, scene, onStatus) {
     if (!['movement', 'events'].includes(channel.label) || link[channel.label]) { channel.close(); return; }
     link[channel.label] = channel;
     channel.onmessage = e => receive(link, e.data);
-    channel.onopen = () => { lastEventRevision = -1; };
+    channel.onopen = () => { lastEventRevision = -1; if (isHost() && channel.label === 'events') publishSlotState(link.id); };
   }
   function newLink(id, connection) {
     closeLink(id);
@@ -225,7 +324,7 @@ export default function browserRoom(token, scene, onStatus) {
         disconnect(); generation = data.generation; host = data.hostSession; snapshotSeq = -1;
         if (!worldReady) { worldAnchor = data.worldSeconds; worldAt = performance.now(); worldReady = true; }
       }
-      if (isHost()) scene.setWorldClock(worldSeconds);
+      if (isHost()) { scene.setWorldClock(worldSeconds); pruneSlotOccupants(); }
       for (const id of [...links.keys()]) if (!roster.has(id) || (!isHost() && id !== host)) closeLink(id);
       for (const message of data.signals) {
         await signal(message);
@@ -298,11 +397,7 @@ export default function browserRoom(token, scene, onStatus) {
     }
   }
   const tickTimer = setInterval(tick, TICK_MS);
-  scene.setSlotPublisher(() => {
-    if (!active()) return;
-    if (isHost()) for (const link of links.values()) send(link.events, { type: 'slotChanged', generation });
-    else send(links.get(host)?.events, { type: 'slotChanged', generation });
-  });
+  scene.setSlotCommand(requestSlot);
   scene.setChatSender(sendChat);
   document.addEventListener('visibilitychange', visibility);
   window.addEventListener('pagehide', leave);
@@ -310,6 +405,7 @@ export default function browserRoom(token, scene, onStatus) {
   return () => {
     stopped = true; clearTimeout(timer); clearInterval(tickTimer); controller?.abort();
     document.removeEventListener('visibilitychange', visibility); window.removeEventListener('pagehide', leave);
-    scene.setChatSender(null); scene.setSlotPublisher(null); disconnect(); void leave();
+    for (const pending of slotRequests.values()) { clearTimeout(pending.timeout); pending.reject(new Error('Lobby closed.')); }
+    slotRequests.clear(); scene.setChatSender(null); scene.setSlotCommand(null); disconnect(); void leave();
   };
 }

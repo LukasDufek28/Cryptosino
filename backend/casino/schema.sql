@@ -48,14 +48,6 @@ CREATE TABLE IF NOT EXISTS casino_browser_signals (
 );
 CREATE INDEX IF NOT EXISTS casino_browser_signal_inbox ON casino_browser_signals(recipient, id);
 
-CREATE TABLE IF NOT EXISTS casino_slot_machines (
-  machine_id TEXT PRIMARY KEY,
-  user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
-  session_id UUID,
-  lease_until TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  spin_ends_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  last_spin JSONB
-);
 CREATE TABLE IF NOT EXISTS casino_slot_requests (
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   request_id UUID NOT NULL,

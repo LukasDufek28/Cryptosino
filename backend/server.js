@@ -839,9 +839,6 @@ app.post('/api/slots/spin', authMiddleware, async (req, res) => {
         clientSeed: seed, nonce,
       };
       await client.query('INSERT INTO casino_slot_requests(user_id,request_id,response) VALUES($1,$2,$3)', [user.id, requestId, JSON.stringify(response)]);
-      if (machineId) await client.query(`UPDATE casino_slot_machines SET last_spin=$2,
-        spin_ends_at=to_timestamp($3/1000.0),lease_until=GREATEST(lease_until,to_timestamp($3/1000.0)) WHERE machine_id=$1`,
-      [machineId, JSON.stringify(publicSpin), startedAt + durationMs]);
       await client.query('COMMIT');
       res.json({ ...response, serverNow: Date.now() });
     } catch (e) {

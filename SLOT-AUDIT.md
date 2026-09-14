@@ -94,15 +94,15 @@ spins: one spin can pay several lines plus a scatter.
 ## Shared 3D play
 
 - Cabinets and stools are against the upstairs rear wall. Approach a stool and
-  press E; the server reserves it, the avatar sits with bent legs, and compact
+  press E; the elected lobby host reserves it, the avatar sits with bent legs, and compact
   stake/paytable controls appear while the world remains visible.
 - Curved reels stop on the server result, including Joker's initial result, held
   reels and respin. Late viewers catch up using server timestamps.
-- WebRTC carries refresh hints, never trusted payouts. Spectators fetch API state.
-  One-second polling is a fallback, not a promise of 30 ms end-to-end latency.
-  Existing WebRTC connectivity limitations still apply to moving avatars.
-- Seats have 15-second leases, renewed about every 5 seconds. Running spins stay
-  reserved until finished even if the player stands or disconnects.
+- WebRTC carries host-authoritative cabinet occupancy and shared reel state, but
+  never trusted payouts. There is no database polling or lease heartbeat for slots.
+  Existing WebRTC connectivity limitations still apply to cabinets and avatars.
+- A new elected host inherits the most recently broadcast cabinet state. Wallet
+  settlement remains available only through the authenticated API.
 - Wallet, bet record, public result and idempotent request record commit in one
   transaction. An uncertain request can retry its UUID without a second charge.
   Browser hosts never determine payouts.
@@ -111,8 +111,8 @@ spins: one spin can pay several lines plus a scatter.
 
 ## Local rollout — not pushed or migrated automatically
 
-Two additive tables are required: `casino_slot_machines` and `casino_slot_requests`.
-The migration retains existing tables and verifies all six casino tables. Configure
+Only the additive `casino_slot_requests` table is required for slots. Cabinet state
+is ephemeral on the lobby host; the migration verifies five casino tables. Configure
 backend/.env privately for the intended database, then run from the repository root:
 
 ```powershell
@@ -125,7 +125,7 @@ database backend/.env selects. It does not reset accounts or balances. Run it
 before deploying the backend, including the legacy slots page. Idempotency records
 are retained; monitor database growth before introducing a retention policy.
 
-Validation: million-round simulations and production compilation. No browser or
-multiplayer gameplay tests were run. Browser checks remain: two distinct accounts,
-simultaneous claims, spectator reels/respin, interrupted-response recovery,
-standing/reseating, and reconnecting during a spin.
+Validation: million-round simulations and production compilation. Browser checks
+remain: two distinct accounts, simultaneous claims, spectator reels/respin,
+interrupted-response recovery, standing/reseating, host change and reconnecting
+during a spin.

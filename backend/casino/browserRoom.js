@@ -60,9 +60,7 @@ module.exports = function browserRoom(authMiddleware) {
       await client.query(`INSERT INTO casino_browser_members(session_id,room_id,user_id,client_version) VALUES($1,$2,$3,$4)
         ON CONFLICT(session_id) DO UPDATE SET updated_at=NOW(),client_version=EXCLUDED.client_version`, [sessionId, world.id, req.user.id, clientVersion]);
       const roster = (await client.query(`SELECT m.session_id AS "sessionId",m.client_version AS version,u.id,u.username,u.is_admin,COALESCE(u.is_owner,FALSE) AS is_owner,
-        COALESCE((SELECT (sm.last_spin->>'balanceBefore')::numeric FROM casino_slot_machines sm
-          WHERE sm.user_id=u.id AND sm.spin_ends_at>NOW() AND sm.last_spin ? 'balanceBefore'
-          ORDER BY sm.spin_ends_at DESC LIMIT 1),u.balance) AS balance FROM casino_browser_members m
+        u.balance FROM casino_browser_members m
         JOIN users u ON u.id=m.user_id WHERE m.room_id=$1 ORDER BY m.joined_at,m.session_id`, [world.id])).rows;
       // Prefer the newest client patch. The roster is ordered by join time, so
       // equal-version rooms keep their oldest active member as the stable host.

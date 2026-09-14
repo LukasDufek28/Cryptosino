@@ -39,7 +39,7 @@ export default function createScene(host, events) {
   const peers = new Map();
   const pos = new THREE.Vector3(layout.spawn.x, layout.spawn.y, layout.spawn.z);
   let yaw = layout.spawn.yaw, pitch = -0.05, floor = 2, seat = null;
-  let slotPublisher = null, slotRefresh = null;
+  let slotCommand = null, slotStateReceiver = null;
   let traversingStairs = false;
   let jumpHeight = 0, jumpVelocity = 0;
   const gravity = 18, jumpSpeed = 5.5;
@@ -329,10 +329,12 @@ export default function createScene(host, events) {
       if (disposed) return;
       world.liveSlots.forEach(m => m.update(machines.find(state => state.id === m.id) || null, serverNow));
     },
-    setSlotPublisher(callback) { slotPublisher = callback; },
-    setSlotRefresh(callback) { slotRefresh = callback; },
-    notifySlotChange() { slotPublisher?.(); },
-    refreshSlots() { slotRefresh?.(); },
+    setSlotCommand(callback) { slotCommand = callback; },
+    requestSlot(action, payload) {
+      return slotCommand ? slotCommand(action, payload) : Promise.reject(new Error('Lobby host is not connected.'));
+    },
+    setSlotStateReceiver(callback) { slotStateReceiver = callback; },
+    receiveSlotState(state) { slotStateReceiver?.(state); },
     focus() { if (enabled && !disposed) canvas.focus({ preventScroll: true }); },
     setEnabled(value) { enabled = value; if (!value) { clearInput(); unlock(); } },
     move(x, y) { touch.x = x; touch.y = y; },
