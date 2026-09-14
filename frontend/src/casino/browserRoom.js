@@ -5,6 +5,7 @@ const API = process.env.REACT_APP_API_URL || '';
 const TICK_MS = 30;
 const MAX_BUFFER = 32768;
 const validSequence = n => Number.isSafeInteger(n) && n >= 0;
+const cleanChat = value => typeof value === 'string' && value.trim().length > 0 && value.length <= 100 ? value.trim() : null;
 
 // Cosmetic world state only. Never accept wallet, bet or payout messages here.
 function cleanPose(p) {
@@ -31,6 +32,7 @@ export default function browserRoom(token, scene, onStatus) {
   let iceServers = [], relayConfigured = false, lastStatus = '', errorMessage = '';
   let worldAnchor = 0, worldAt = performance.now(), worldReady = false;
   let lastSnapshot = 0, lastUI = 0, lastEventRevision = -1;
+  let lastChatAt = 0;
   const isHost = () => host === sessionId;
   const worldSeconds = () => worldAnchor + (performance.now() - worldAt) / 1000;
   const active = () => !stopped && lastSync > 0 && performance.now() - lastSync < 10000;
@@ -94,10 +96,24 @@ export default function browserRoom(token, scene, onStatus) {
     if (!packet || packet.generation !== generation) return;
     link.lastReceived = now;
     if (isHost()) {
+      if (packet.type === 'chat') {
+        const text = cleanChat(packet.text);
+        if (!text || now - link.lastChatAt < 750) return;
+        link.lastChatAt = now;
+        const member = roster.get(link.id);
+        if (member) scene.showPeerChat(member.id, text);
+        for (const [id, peer] of links) if (id !== link.id) send(peer.events, { type: 'chat', generation, sender: link.id, text });
+        return;
+      }
       if (packet.type === 'pose' || packet.type === 'event') acceptPose(link.id, packet.pose, packet.seq);
       return;
     }
     if (link.id !== host) return;
+    if (packet.type === 'chat') {
+      const text = cleanChat(packet.text), member = roster.get(packet.sender);
+      if (text && member && packet.sender !== sessionId) scene.showPeerChat(member.id, text);
+      return;
+    }
     if (packet.type === 'seatRejected' && validSequence(packet.revision)) {
       scene.rejectSeat(packet.seatId, packet.revision); return;
     }
@@ -129,7 +145,7 @@ export default function browserRoom(token, scene, onStatus) {
   function newLink(id, connection) {
     closeLink(id);
     const pc = new RTCPeerConnection({ iceServers });
-    const link = { id, connection, pc, created: performance.now(), lastReceived: 0, received: 0, rateAt: performance.now() };
+    const link = { id, connection, pc, created: performance.now(), lastReceived: 0, received: 0, rateAt: performance.now(), lastChatAt: 0 };
     links.set(id, link);
     pc.ondatachannel = e => attach(link, e.channel);
     return link;
@@ -254,6 +270,14 @@ export default function browserRoom(token, scene, onStatus) {
     }
     if (now - lastUI > 500) { status(); lastUI = now; }
   }
+  function sendChat(message) {
+    const text = cleanChat(message), now = performance.now();
+    if (!text || !active() || now - lastChatAt < 750) return;
+    lastChatAt = now;
+    if (isHost()) {
+      for (const link of links.values()) send(link.events, { type: 'chat', generation, sender: sessionId, text });
+    } else send(links.get(host)?.events, { type: 'chat', generation, text });
+  }
   function leave() {
     return fetch(`${API}/api/casino/browser-room/${sessionId}`, { method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` }, keepalive: true }).catch(() => {});
@@ -266,12 +290,13 @@ export default function browserRoom(token, scene, onStatus) {
     }
   }
   const tickTimer = setInterval(tick, TICK_MS);
+  scene.setChatSender(sendChat);
   document.addEventListener('visibilitychange', visibility);
   window.addEventListener('pagehide', leave);
   void sync();
   return () => {
     stopped = true; clearTimeout(timer); clearInterval(tickTimer); controller?.abort();
     document.removeEventListener('visibilitychange', visibility); window.removeEventListener('pagehide', leave);
-    disconnect(); void leave();
+    scene.setChatSender(null); disconnect(); void leave();
   };
 }

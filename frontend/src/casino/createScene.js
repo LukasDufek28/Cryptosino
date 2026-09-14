@@ -44,6 +44,7 @@ export default function createScene(host, events) {
   const gravity = 18, jumpSpeed = 5.5;
   const playerRadius = 0.45;
   let enabled = true, disposed = false, last = 0, uiAt = 0, nearest = null;
+  let chatSender = null;
   let dragging = false, lastX = 0, lastY = 0, moved = false;
   let dragPointer = null, skipLockedMove = true;
   const keys = new Set();
@@ -285,6 +286,8 @@ export default function createScene(host, events) {
       camera.rotation.set(pitch, yaw, 0, 'YXZ');
       self.group.position.set(pos.x, pos.y + jumpHeight - (seat ? 0.4 : 0), pos.z);
       self.group.rotation.y = yaw;
+      self.chatBubble.quaternion.copy(camera.quaternion).premultiply(self.group.quaternion.clone().invert());
+      self.updateChat(now);
       world.receptionist.trackNearest([self.group.position, ...[...peers.values()].map(peer => peer.group.position)]);
       world.mirror.visible = floor === 1;
       localWorldSeconds = worldClock ? worldClock() : localWorldSeconds + dt;
@@ -296,6 +299,8 @@ export default function createScene(host, events) {
         p.group.position.lerp(p.target, 1 - Math.exp(-dt * 25));
         p.group.rotation.y += Math.atan2(Math.sin(p.yaw - p.group.rotation.y), Math.cos(p.yaw - p.group.rotation.y)) * (1 - Math.exp(-dt * 25));
         p.name.quaternion.copy(camera.quaternion).premultiply(p.group.quaternion.clone().invert());
+        p.chatBubble.quaternion.copy(camera.quaternion).premultiply(p.group.quaternion.clone().invert());
+        p.updateChat(now);
       });
       if (now - uiAt > 150) { updateNearest(); uiAt = now; }
       renderer.render(scene, camera);
@@ -316,6 +321,12 @@ export default function createScene(host, events) {
     pose() { return { x: pos.x, z: pos.z, yaw, floor, jumpHeight, revision: poseRevision, seatId: seat?.id || null, faceSeed: visitFaceSeed }; },
     peerCount() { return peers.size; },
     updateLeaderboard(data) { if (!disposed) world.leaderboard.update(data); },
+    setChatSender(sender) { chatSender = sender; },
+    chat(message) {
+      const text = String(message || '').trim().slice(0, 100);
+      if (!disposed && text) { self.showChat(text); chatSender?.(text); }
+    },
+    showPeerChat(id, message) { if (!disposed) peers.get(id)?.showChat(message); },
     setWorldClock(clock) { if (!disposed) worldClock = clock; },
     rejectSeat(id, revision) { if (!disposed && seat?.id === id && poseRevision === revision) stand(); },
     updatePeers(players) {

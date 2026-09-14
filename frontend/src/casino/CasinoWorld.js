@@ -74,6 +74,8 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
   const [activeGame, setActiveGame] = useState(null);
   const [showMap, setShowMap] = useState(true);
   const [receptionMessage, setReceptionMessage] = useState('');
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatText, setChatText] = useState('');
   const openGameRef = useRef(null);
   const resetBalanceRef = useRef(null);
   const resetBusyRef = useRef(false);
@@ -116,7 +118,16 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
   useLeaderboard(sceneRef, ready);
   // Signing out also closes any retained authenticated game screen.
   useEffect(() => { if (!token) setPanel(current => current === 'game' ? null : current); }, [token]);
-  useEffect(() => { sceneRef.current?.setEnabled(!welcome && !panel && !error); }, [welcome, panel, error, ready]);
+  useEffect(() => { sceneRef.current?.setEnabled(!welcome && !panel && !chatOpen && !error); }, [welcome, panel, chatOpen, error, ready]);
+  useEffect(() => {
+    const openChat = event => {
+      if (event.code !== 'KeyT' || event.ctrlKey || event.metaKey || event.altKey || welcome || panel || chatOpen || error ||
+          event.target.isContentEditable || /INPUT|TEXTAREA|SELECT/.test(event.target.tagName)) return;
+      event.preventDefault(); setChatText(''); setChatOpen(true);
+    };
+    document.addEventListener('keydown', openChat);
+    return () => document.removeEventListener('keydown', openChat);
+  }, [welcome, panel, chatOpen, error]);
   const closePanel = useCallback(() => setPanel(null), []);
   const start = () => { setWelcome(false); sceneRef.current?.setEnabled(true); sceneRef.current?.lock(); };
   const Game = activeGame ? games[activeGame] : null;
@@ -156,13 +167,22 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
     </>}
 
     <footer className="amber-bottom">
-      <div className="amber-instructions"><span><kbd>W A S D</kbd> Move</span><span><kbd>MOUSE</kbd> Look</span><span><kbd>SPACE</kbd> Jump</span><span><kbd>E</kbd> Interact</span><span><kbd>R</kbd> Reset position</span><span><kbd>ESC</kbd> Cursor</span></div>
+      <div className="amber-instructions"><span><kbd>W A S D</kbd> Move</span><span><kbd>MOUSE</kbd> Look</span><span><kbd>SPACE</kbd> Jump</span><span><kbd>E</kbd> Interact</span><span><kbd>T</kbd> Chat</span><span><kbd>R</kbd> Reset position</span><span><kbd>ESC</kbd> Cursor</span></div>
       <button className="amber-reset" onClick={() => sceneRef.current?.home()} title="Return upstairs (R)">Return upstairs ↗</button>
     </footer>
     {showMap && !panel && <MiniMap status={status} />}
     {presence.message && <div className="amber-presence-note" role="status">{presence.message}</div>}
     {receptionMessage && <div className="amber-reception-note" role="status">{receptionMessage}<button aria-label="Dismiss receptionist message" onClick={() => setReceptionMessage('')}>×</button></div>}
-    <PlayerList enabled={!welcome && !panel && !error} presence={presence} user={user} balance={balance} sceneRef={sceneRef} />
+    {chatOpen && <form className="amber-chat-compose" onSubmit={event => {
+      event.preventDefault(); sceneRef.current?.chat(chatText); setChatOpen(false); setChatText('');
+      requestAnimationFrame(() => sceneRef.current?.lock());
+    }}>
+      <input autoFocus maxLength={100} value={chatText} onChange={event => setChatText(event.target.value)} onKeyDown={event => {
+        if (event.code === 'Escape') { event.preventDefault(); setChatOpen(false); setChatText(''); requestAnimationFrame(() => sceneRef.current?.lock()); }
+      }} placeholder="Say something…" aria-label="Chat message" />
+      <span>{chatText.length}/100</span><button type="submit" disabled={!chatText.trim()}>Send</button>
+    </form>}
+    <PlayerList enabled={!welcome && !panel && !chatOpen && !error} presence={presence} user={user} balance={balance} sceneRef={sceneRef} />
     {error && <div className="amber-error" role="alert"><h2>A moment, please.</h2><p>{error}</p><button className="amber-pill" onClick={() => window.location.reload()}>Reload</button> <Link to="/lobby">Open classic casino</Link></div>}
 
     {panel === 'directory' && <Dialog title="The collection" onClose={closePanel}>

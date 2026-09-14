@@ -55,6 +55,10 @@
 .amber-presence-note { position: absolute; bottom: 62px; left: 40px; font-size: 9px; color: #eadabe; }
 .amber-reception-note { position: absolute; left: 50%; bottom: 155px; transform: translateX(-50%); display: flex; align-items: center; gap: 13px; padding: 10px 14px; border: 1px solid #d5bc8866; border-radius: 6px; background: #263d32e8; color: #f0dfbf; font-size: 10px; }
 .amber-reception-note button { border: 0; background: transparent; color: #dec796; font-size: 17px !important; padding: 0; }
+.amber-chat-compose { position: absolute; z-index: 9; left: 50%; bottom: 105px; transform: translateX(-50%); width: min(560px, calc(100vw - 40px)); display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; padding: 10px; border: 1px solid #dec79777; border-radius: 8px; background: #20372feb; box-shadow: 0 12px 45px #0005; }
+.amber-chat-compose input { min-width: 0; border: 0; outline: 0; border-radius: 5px; background: #f8ecd5; color: #26362f; padding: 12px 14px; font: 13px 'Inter', sans-serif; }
+.amber-chat-compose > span { color: #bfcbbd; font: 9px monospace; }
+.amber-chat-compose button { border: 1px solid #ddc39177; border-radius: 5px; background: #d8ba82; color: #29382f; padding: 11px 15px; font-size: 11px !important; }
 .amber-modal-shade { position: absolute; inset: 0; z-index: 10; background: #15281fc4; backdrop-filter: blur(12px); display: grid; place-items: center; padding: 28px; }
 .amber-modal { max-height: calc(100dvh - 56px); width: min(580px, 100%); overflow: auto; background: #233d33; border: 1px solid #c3a67666; border-radius: 15px; box-shadow: 0 30px 100px #0005; outline: none; }
 .amber-modal-large { width: min(1080px, 100%); }

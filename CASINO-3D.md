@@ -98,6 +98,9 @@ using unordered, non-retransmitted packets with sequence checks and bounded
 send buffers. Discrete seat/stand, face, reset, and jump changes also use an
 ordered reliable channel. The host arbitrates occupied seats and shares the
 street traffic clock. Local movement/camera are never replaced by a snapshot.
+Pressing T opens ephemeral room chat. Messages are capped at 100 characters,
+rate-limited, relayed over the reliable WebRTC event channel, and shown as
+five-second cartoon bubbles above avatars. Chat is never written to PostgreSQL.
 
 The 30ms interval is not a latency guarantee: host relaying, distance, jitter,
 browser scheduling and interpolation add delay. Setup may take several seconds.

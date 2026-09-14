@@ -120,13 +120,44 @@ export function avatar(parent, username, color, faceSeed = 0) {
   [-0.13, 0.13].forEach(a => box(g, [0.2, 0.55, 0.22], '#3d4d4c', [a, 0.42, 0]));
   [-0.36, 0.36].forEach(a => box(g, [0.16, 0.55, 0.19], color, [a, 1.02, 0]));
   const name = sign(g, username.slice(0, 22), 1.7, [0, 2.17, 0]);
+  const chatCanvas = document.createElement('canvas'); chatCanvas.width = 1024; chatCanvas.height = 512;
+  const chatContext = chatCanvas.getContext('2d');
+  const chatTexture = new THREE.CanvasTexture(chatCanvas); chatTexture.colorSpace = THREE.SRGBColorSpace;
+  const chatBubble = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 1.7), new THREE.MeshBasicMaterial({ map: chatTexture, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+  chatBubble.position.set(0, 3.08, 0); chatBubble.visible = false; g.add(chatBubble);
   const face = group(g, 0, 1.65, -0.2, Math.PI);
   const pupils = [-0.095, 0.095].map(x => {
     mesh(face, new THREE.SphereGeometry(0.085, 10, 8), '#fff8e6', [x, 0.045, 0.015]);
     return mesh(face, new THREE.SphereGeometry(0.033, 8, 6), '#262c30', [x, 0.045, 0.092]);
   });
   const mouth = mesh(face, new THREE.BufferGeometry(), '#60362e');
-  let currentSeed;
+  let currentSeed, chatUntil = 0;
+  function showChat(message) {
+    const words = String(message).trim().slice(0, 100).split(/\s+/), lines = [];
+    chatContext.font = '600 54px sans-serif';
+    for (const word of words) {
+      const candidate = lines.length ? `${lines[lines.length - 1]} ${word}` : word;
+      if (lines.length && chatContext.measureText(candidate).width > 790) lines.push(word);
+      else if (lines.length) lines[lines.length - 1] = candidate;
+      else lines.push(word);
+    }
+    if (lines.length > 3) { lines.length = 3; lines[2] = `${lines[2].slice(0, 20)}…`; }
+    chatContext.clearRect(0, 0, 1024, 512);
+    chatContext.beginPath();
+    chatContext.moveTo(95, 55); chatContext.lineTo(929, 55);
+    chatContext.quadraticCurveTo(969, 55, 969, 95); chatContext.lineTo(969, 365);
+    chatContext.quadraticCurveTo(969, 405, 929, 405); chatContext.lineTo(555, 405);
+    chatContext.lineTo(500, 475); chatContext.lineTo(465, 405); chatContext.lineTo(95, 405);
+    chatContext.quadraticCurveTo(55, 405, 55, 365); chatContext.lineTo(55, 95);
+    chatContext.quadraticCurveTo(55, 55, 95, 55); chatContext.closePath();
+    chatContext.fillStyle = '#fff7df'; chatContext.fill();
+    chatContext.strokeStyle = '#3d493f'; chatContext.lineWidth = 12; chatContext.stroke();
+    chatContext.fillStyle = '#28352e'; chatContext.textAlign = 'center'; chatContext.textBaseline = 'middle';
+    const lineHeight = 68, firstY = 230 - (lines.length - 1) * lineHeight / 2;
+    lines.forEach((line, index) => chatContext.fillText(line, 512, firstY + index * lineHeight, 790));
+    chatTexture.needsUpdate = true; chatBubble.visible = true; chatUntil = performance.now() + 5000;
+  }
+  function updateChat(now) { if (chatBubble.visible && now >= chatUntil) chatBubble.visible = false; }
   function setFace(seed = 0) {
     if (seed === currentSeed) return;
     currentSeed = seed;
@@ -146,7 +177,7 @@ export function avatar(parent, username, color, faceSeed = 0) {
     mouth.geometry = new THREE.TubeGeometry(curve, 12, 0.012, 5, false);
   }
   setFace(faceSeed);
-  return { group: g, name, setFace };
+  return { group: g, name, chatBubble, setFace, showChat, updateChat };
 }
 export function receptionist(parent, x, y, z) {
   const g = group(parent, x, y, z);
