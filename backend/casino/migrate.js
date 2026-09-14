@@ -10,12 +10,13 @@ const { getClient, pool } = require('../db');
     await client.query("SET LOCAL lock_timeout = '5s'");
     await client.query("SET LOCAL statement_timeout = '20s'");
     await client.query(readFileSync(join(__dirname, 'schema.sql'), 'utf8'));
+    await client.query(readFileSync(join(__dirname, '../trading/schema.sql'), 'utf8'));
     const result = await client.query(`SELECT COUNT(*)::int AS count FROM information_schema.tables
       WHERE table_schema=current_schema() AND table_name IN
-      ('casino_presence','casino_browser_rooms','casino_browser_members','casino_browser_signals','casino_slot_requests')`);
-    if (result.rows[0].count !== 5) throw new Error('Casino schema incomplete');
+      ('casino_presence','casino_browser_rooms','casino_browser_members','casino_browser_signals','casino_slot_requests','trading_market','trading_positions','trading_orders')`);
+    if (result.rows[0].count !== 8) throw new Error('Casino schema incomplete');
     await client.query('COMMIT');
-    console.log('Casino schema installed and verified: presence, browser rooms, members, signaling and idempotent spin requests.');
+    console.log('Casino schema verified, including synthetic market, positions and orders.');
   } catch (error) {
     if (client) await client.query('ROLLBACK').catch(() => {});
     console.error('Casino migration failed:', error.code || 'database unavailable');

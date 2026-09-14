@@ -5,6 +5,8 @@ import createScene from './createScene';
 import usePresence from './usePresence';
 import PlayerList from './PlayerList';
 import useLeaderboard from './useLeaderboard';
+import useTradingMarket from './useTradingMarket';
+import TradingDesk from './TradingDesk';
 import useSlotMachines from './useSlotMachines';
 import SlotControls from './SlotControls';
 import layout from './worldLayout.json';
@@ -23,19 +25,20 @@ const API_URL = process.env.REACT_APP_API_URL || '';
 function MiniMap({ status }) {
   return <div className="amber-map" aria-label={`Floor ${status.floor} map`}>
     <div className="amber-map-title"><span>YOU ARE HERE</span><span>0{status.floor}</span></div>
-    <svg viewBox="-16 -12 32 25" role="img" aria-label="Your position inside the casino">
+    <svg viewBox={status.floor === 1 ? '-16 -12 64 46' : '-16 -12 32 25'} role="img" aria-label="Your position in the casino district">
       <rect x="-14" y="-10" width="28" height="20" rx="0.6" fill="#eddcb9" opacity="0.12" stroke="#d7b875" strokeWidth="0.25" />
       <path d="M-9.5 -3.5V7.5H-13.3V-3.5Z" fill="#d7b875" opacity="0.2" />
       {status.floor === 2 && <>
         {layout.stations.map(s => <rect key={s.id} x={s.x - 1.1} y={s.z - 0.7} width="2.2" height="1.4" rx="0.3" fill={s.color} />)}
         {layout.seats.map(s => <rect key={s.id} x={s.x - 1.7} y={s.z - 0.5} width="3.4" height="1" rx="0.3" fill="#c58d65" />)}
       </>}
-      <path d="M-14 10.5H14" stroke="#9ebcb5" strokeWidth="0.35" />
-      <g transform={`translate(${Math.max(-14, Math.min(14, status.x))} ${Math.max(-10, Math.min(11, status.z))}) rotate(${-status.yaw * 180 / Math.PI})`}>
+      {status.floor === 1 && <><rect x="18" y="-10" width="18" height="20" fill="#71a796" opacity="0.3" stroke="#d7b875" strokeWidth="0.3"/><text x="27" y="0" textAnchor="middle" fill="#ffe4ac" fontSize="2">EXCHANGE</text><path d="M-14 22H46" stroke="#9ebcb5" strokeWidth="3" opacity="0.3" /></>}
+      <path d="M-14 10.5H36" stroke="#9ebcb5" strokeWidth="0.35" />
+      <g transform={`translate(${Math.max(-14, Math.min(status.floor === 1 ? 46 : 14, status.x))} ${Math.max(-10, Math.min(status.floor === 1 ? 32 : 11, status.z))}) rotate(${-status.yaw * 180 / Math.PI})`}>
         <path d="M0 -1.15L0.65 0.7L0 0.35L-0.65 0.7Z" fill="#ffe4ac" />
       </g>
     </svg>
-    <div className="amber-map-foot">{status.floor === 2 ? 'Casino & window lounge' : 'Reception & street'}</div>
+    <div className="amber-map-foot">{status.floor === 2 ? 'Casino & window lounge' : 'Casino · Street · Exchange'}</div>
   </div>;
 }
 
@@ -82,7 +85,7 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
   const openSlotRef = useRef(null);
   const resetBalanceRef = useRef(null);
   const resetBusyRef = useRef(false);
-  openGameRef.current = game => { setActiveGame(game); setPanel(token && user ? 'game' : 'auth'); };
+  openGameRef.current = game => { setActiveGame(game); setPanel(token && user ? (game === 'trading' ? 'trading' : 'game') : 'auth'); };
   resetBalanceRef.current = async () => {
     if (!token) { setActiveGame(null); setPanel('auth'); return; }
     if (Number(balance) >= 1000) return;
@@ -119,10 +122,11 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
   }, []);
   const presence = usePresence(token, sceneRef, ready);
   useLeaderboard(sceneRef, ready);
+  const tradingMarket = useTradingMarket(sceneRef, ready);
   const slots = useSlotMachines(sceneRef, ready, token, setBalance);
   openSlotRef.current = id => { if (!token) { setActiveGame(null); setPanel('auth'); } else slots.claim(id); };
   // Signing out also closes any retained authenticated game screen.
-  useEffect(() => { if (!token) setPanel(current => current === 'game' ? null : current); }, [token]);
+  useEffect(() => { if (!token) setPanel(current => ['game', 'trading'].includes(current) ? null : current); }, [token]);
   useEffect(() => { sceneRef.current?.setEnabled(!welcome && !panel && !chatOpen && !error); }, [welcome, panel, chatOpen, error, ready]);
   useEffect(() => {
     const openChat = event => {
@@ -194,14 +198,17 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
     {panel === 'directory' && <Dialog title="The collection" onClose={closePanel}>
       <p className="amber-modal-intro">Four ways to make an evening. Find a station upstairs, or take a seat right here.</p>
       <div className="amber-directory">{layout.stations.map((s, i) => <button key={s.id} onClick={() => openGameRef.current(s.game)} style={{ '--station-color': s.color }}><span className="amber-game-number">0{i + 1}</span><span><strong>{s.name}</strong><small>{s.description}</small></span><span>↗</span></button>)}</div>
-      <p className="amber-caption">The tables open the original game screens. Fully 3D games are coming in a later chapter.</p>
+      <p className="amber-caption">For synthetic trading, leave through reception and enter Amber Exchange next door: on your right when facing the casino from the street. Press E at a trading terminal.</p>
     </Dialog>}
     {panel === 'auth' && <Dialog title="Welcome to the house" onClose={closePanel}>
-      <AuthPage onAuth={(u, t) => { onAuth(u, t); setPanel(activeGame ? 'game' : null); }} />
+      <AuthPage onAuth={(u, t) => { onAuth(u, t); setPanel(activeGame === 'trading' ? 'trading' : activeGame ? 'game' : null); }} />
       <p className="amber-caption">You can explore the building without an account. Sign in to play.</p>
     </Dialog>}
     {panel === 'game' && Game && <Dialog title={gameNames[activeGame]} onClose={closePanel} large>
       <Suspense fallback={<p className="amber-caption">Preparing your table…</p>}><Game balance={balance} setBalance={setBalance} token={token} /></Suspense>
+    </Dialog>}
+    {panel === 'trading' && token && user && <Dialog title="Amber Exchange · Trading terminal" onClose={closePanel} large>
+      <TradingDesk key={user.id} token={token} user={user} marketFeed={tradingMarket} setBalance={setBalance} />
     </Dialog>}
     {panel === 'account' && <Dialog title={`Good evening, ${user?.username || 'guest'}`} onClose={closePanel}>
       <div className="amber-account"><p>Your balance</p><h3>${Number(balance).toFixed(2)}</h3><Link to="/lobby">Open classic casino ↗</Link>{user?.is_admin && <Link to="/admin">Admin dashboard ↗</Link>}<button className="amber-pill" onClick={() => { closePanel(); onLogout(); }}>Sign out</button></div>

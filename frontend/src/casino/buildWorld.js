@@ -3,6 +3,7 @@ import { Reflector } from 'three/examples/jsm/objects/Reflector.js';
 import layout from './worldLayout.json';
 import leaderboardBoard from './leaderboardBoard';
 import liveSlotMachine from './liveSlotMachine';
+import tradingFacility from './tradingFacility';
 import { box, cylinder, group, mesh, sign, plant, couch, floorLamp, pendant, slotMachine, gameTable, car, receptionist as receptionistModel } from './models';
 
 export default function buildWorld(scene) {
@@ -10,6 +11,7 @@ export default function buildWorld(scene) {
   const obstacles = [];
   const block = (x, z, w, d, floor) => obstacles.push({ x, z, w, d, floor });
   const building = group(scene);
+  const trading = tradingFacility(scene, block);
   // The street and sunset neighborhood remain visible through actual glazing.
   box(scene, [170, 0.25, 110], '#a7ad84', [0, -0.35, 22]);
   box(scene, [150, 0.12, 9], '#797c7a', [0, -0.09, 22]);
@@ -167,5 +169,5 @@ export default function buildWorld(scene) {
     const m = new THREE.Mesh(new THREE.RingGeometry(0.43, 0.48, 32), new THREE.MeshBasicMaterial({ color: '#e4bc73', side: THREE.DoubleSide, transparent: true, opacity: 0.75 }));
     m.rotation.x = -Math.PI / 2; m.position.set(s.x, upper + 0.07, s.z + 2.5); building.add(m); return m;
   });
-  return { cars, obstacles, markers, mirror, faceButton, leaderboard, peakLeaderboard, receptionist, resetButton, liveSlots };
+  return { cars, obstacles, markers, mirror, faceButton, leaderboard, peakLeaderboard, receptionist, resetButton, liveSlots, trading };
 }

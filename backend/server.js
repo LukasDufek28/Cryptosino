@@ -225,6 +225,7 @@ async function demoteAdmin(req, res) {
 }
 
 app.use('/api/casino', require('./casino/router')(authMiddleware));
+app.use('/api/trading', require('./trading/router')(authMiddleware));
 
 app.post('/api/admin/users/:id/demote', authMiddleware, adminOnly, demoteAdmin);
 // Retained for clients that have not yet received the renamed frontend.
@@ -298,18 +299,31 @@ app.post('/api/admin/users/:id/balance', authMiddleware, adminOnly, async (req, 
 
 // Reset balance to 1000 if current balance < 1000
 app.post('/api/reset-balance', authMiddleware, async (req, res) => {
+  let client;
   try {
-    const { rows } = await query('SELECT id, balance FROM users WHERE id=$1', [req.user.id]);
-    if (!rows.length) return res.status(404).json({ error: 'User not found' });
+    client = await require('./db').getClient();
+    await client.query('BEGIN');
+    const { rows } = await client.query('SELECT id, balance FROM users WHERE id=$1 FOR UPDATE', [req.user.id]);
+    if (!rows.length) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'User not found' }); }
     const current = Number(rows[0].balance);
     if (current >= 1000) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Balance is already 1000 or higher' });
     }
-  await query('UPDATE users SET balance=1000.00, peak_balance=GREATEST(peak_balance, 1000.00) WHERE id=$1', [req.user.id]);
+    // The same wallet lock serializes buys and resets: invested cash cannot be
+    // hidden in holdings to repeatedly claim the free balance refill.
+    const holdings = await client.query('SELECT 1 FROM trading_positions WHERE user_id=$1 AND quantity>0 LIMIT 1', [req.user.id]);
+    if (holdings.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'Sell your trading holdings before requesting a balance reset.' });
+    }
+    await client.query('UPDATE users SET balance=1000.00, peak_balance=GREATEST(peak_balance, 1000.00) WHERE id=$1', [req.user.id]);
+    await client.query('COMMIT');
     res.json({ ok: true, balance: 1000.00 });
   } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
+    if (client) await client.query('ROLLBACK').catch(() => {});
+    res.status(503).json({ error: 'Balance reset unavailable. Check the casino migration.' });
+  } finally { client?.release(); }
 });
 
 // Dice configuration

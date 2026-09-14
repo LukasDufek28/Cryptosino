@@ -167,9 +167,10 @@ export default function createScene(host, events) {
       return Math.min(px - left, right - px, pz - top, bottom - pz);
     };
     if (floor === 2 && (x > 13.4 || x < -13.4 || z > 9.35)) return false;
-    if (z < 10 && Math.abs(x) > 13.4) return false;
+    const inTrading = floor === 1 && x > 18.6 && x < 35.4;
+    if (z < 10 && Math.abs(x) > 13.4 && !inTrading) return false;
     // Glazing is solid except for the reception entrance.
-    if (floor === 1 && z > 9.35 && z < 10.6 && Math.abs(x) > 1.75) return false;
+    if (floor === 1 && z > 9.35 && z < 10.6 && Math.abs(x) > 1.75 && Math.abs(x - 27) > 1.35) return false;
     // The rails are solid along the whole flight. A player can enter only from
     // the landing that belongs to their current floor, never from the side or
     // from the small ground-floor space beneath the upper landing.
@@ -222,7 +223,7 @@ export default function createScene(host, events) {
     if (!seat && floor === 1 && pos.y < 0.1) {
       camera.getWorldDirection(direction);
       let best = 3.4;
-      [{ kind: 'face', item: world.faceButton }, { kind: 'reset', item: world.resetButton }].forEach(option => {
+      [{ kind: 'face', item: world.faceButton }, { kind: 'reset', item: world.resetButton }, ...world.trading.terminals.map(item => ({ kind: 'game', item }))].forEach(option => {
         const item = option.item;
         const distance = Math.hypot(pos.x - item.x, pos.z - item.z);
         focus.set(item.x - pos.x, 0, item.z - pos.z).normalize();
@@ -341,6 +342,7 @@ export default function createScene(host, events) {
     home,
     pose() { return { x: pos.x, z: pos.z, yaw, floor, jumpHeight, revision: poseRevision, seatId: seat?.id || null, faceSeed: visitFaceSeed }; },
     peerCount() { return peers.size; },
+    updateTrading(data) { if (!disposed) world.trading.update(data); },
     updateLeaderboard(data) {
       if (!disposed) {
         world.leaderboard.update(data);
