@@ -153,13 +153,11 @@ export function receptionist(parent, x, y, z) {
   cylinder(g, 0.28, 0.34, 0.72, '#6f8171', [0, 1.08, 0], 8);
   box(g, [0.72, 0.18, 0.32], '#d8c29c', [0, 1.42, 0]);
   mesh(g, new THREE.IcosahedronGeometry(0.29, 2), '#d3a082', [0, 1.78, 0]);
-  // He wears his cape backwards: the wide drape sits proudly over his chest.
-  const capeShape = new THREE.Shape();
-  capeShape.moveTo(-0.22, 0.55); capeShape.lineTo(0.22, 0.55);
-  capeShape.lineTo(0.52, -0.55); capeShape.lineTo(-0.52, -0.55); capeShape.closePath();
-  mesh(g, new THREE.ShapeGeometry(capeShape), '#713b4a', [0, 1.02, 0.36], { side: THREE.DoubleSide });
-  const clasp = cylinder(g, 0.07, 0.07, 0.045, '#d6b46f', [0, 1.5, 0.39], 10);
-  clasp.rotation.x = Math.PI / 2;
+  // A fitted baseball cap with its brim pointing backward (-Z).
+  cylinder(g, 0.22, 0.3, 0.22, '#713b4a', [0, 2.01, -0.01], 12);
+  const brim = box(g, [0.38, 0.045, 0.3], '#713b4a', [0, 1.96, -0.25]);
+  brim.rotation.x = -0.08;
+  box(g, [0.15, 0.055, 0.025], '#d6b46f', [0, 1.96, 0.285]);
   const eyeY = 1.82, eyeZ = 0.245;
   const pupils = [-0.105, 0.105].map(eyeX => {
     mesh(g, new THREE.SphereGeometry(0.082, 10, 8), '#fff8e6', [eyeX, eyeY, eyeZ]);
