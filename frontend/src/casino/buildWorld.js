@@ -104,11 +104,11 @@ export default function buildWorld(scene) {
   box(building, [5, 0.035, 14], '#6b7a60', [0, 0.03, 1.2]);
   box(building, [5.5, 1.12, 1.3], '#486052', [5.8, 0.56, -5]);
   box(building, [5.7, 0.13, 1.5], '#d6bc91', [5.8, 1.18, -5]);
-  const receptionist = receptionistModel(building, 5.8, 0, -5.72);
+  const receptionist = receptionistModel(building, 5.8, 0, -6.12);
   sign(building, 'ASK ABOUT THE $1,000 RESET', 4.6, [5.8, 2.75, -5.78], { background: '#365348', serif: true, fontSize: 46 });
-  const resetButton = { x: 5.8, z: -4.18, name: '$1,000 balance reset' };
-  cylinder(building, 0.24, 0.28, 0.1, '#b99861', [resetButton.x, 1.31, resetButton.z], 12);
-  cylinder(building, 0.14, 0.14, 0.08, '#d88668', [resetButton.x, 1.4, resetButton.z], 12, { emissive: '#b64f3d', emissiveIntensity: 0.35 });
+  const resetButton = { x: 5.8, z: -4.58, name: '$1,000 balance reset' };
+  cylinder(building, 0.24, 0.28, 0.1, '#b99861', [resetButton.x, 1.295, resetButton.z], 12);
+  cylinder(building, 0.14, 0.14, 0.08, '#d88668', [resetButton.x, 1.385, resetButton.z], 12, { emissive: '#b64f3d', emissiveIntensity: 0.35 });
   sign(building, 'A GOOD EVENING STARTS HERE', 6, [4, 2.8, -9.76], { serif: true });
   block(5.8, -5, 5.7, 1.5, 1);
   plant(building, 10.8, 0, -7.9, 1.4); plant(building, -6.7, 0, 8, 1.3);
