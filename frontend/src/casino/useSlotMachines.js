@@ -10,11 +10,14 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance) {
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [retry, setRetry] = useState(false);
+  const [autoSpin, setAutoSpin] = useState(false);
   const [bet, setBet] = useState('10');
+  const betRef = useRef(bet);
+  betRef.current = bet;
   useEffect(() => {
     if (!ready) return undefined;
     const scene = sceneRef.current, sessionId = crypto.randomUUID();
-    let stopped = false, active = null, claiming = false, pending = null, sending = false;
+    let stopped = false, active = null, claiming = false, pending = null, sending = false, autoSpinning = false, autoTimer = null;
     let polling = false, refreshing = false, heartbeatAt = 0, endAt = 0, resultText = '', pendingBalance = null, messageTimer = null;
     let machines = [];
     const controllers = new Set();
@@ -32,6 +35,7 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance) {
     };
     const release = () => {
       const id = active; active = null;
+      autoSpinning = false; setAutoSpin(false); if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
       if (!stopped) { setSelected(null); setBusy(false); }
       if (id) void fetch(`${API}/api/casino/slots/${id}/${sessionId}`, { method: 'DELETE', keepalive: true,
         headers: { Authorization: `Bearer ${token}` } }).catch(() => {}).finally(() => scene.notifySlotChange());
@@ -77,6 +81,13 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance) {
     const clearMessageTimer = () => {
       if (messageTimer) { clearTimeout(messageTimer); messageTimer = null; }
     };
+    const queueAutoSpin = () => {
+      if (!autoSpinning || stopped || !active || autoTimer) return;
+      autoTimer = setTimeout(() => {
+        autoTimer = null;
+        if (autoSpinning && active && scene.pose().seatId === `seat-${active}` && !stopped) actions.current.spin?.(betRef.current);
+      }, 650);
+    };
     actions.current = {
       async claim(id) {
         if (claiming || sending || pending || stopped || !token) return;
@@ -117,18 +128,24 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance) {
           pendingBalance = Number(result.newBalance);
           resultText = `Return $${Number(spin.totalPayout).toFixed(2)} (stake $${Number(spin.bet).toFixed(2)}).`;
           if (spin.startedAt + spin.durationMs <= serverNow) {
-            endAt = 0; setBalance(pendingBalance); pendingBalance = null; setBusy(false); showResultMessage(resultText);
+            endAt = 0; setBalance(pendingBalance); pendingBalance = null; setBusy(false); showResultMessage(resultText); queueAutoSpin();
           } else setMessage('Reels spinning…');
           scene.notifySlotChange(); void refresh();
         } catch (error) {
           if (stopped) return;
+          autoSpinning = false; setAutoSpin(false);
           if (error.status >= 400 && error.status < 500) pending = null;
           setRetry(Boolean(pending));
           setMessage(pending ? 'Connection interrupted. Retry this same spin to recover its result—no second charge.' : error.message);
           setBusy(false);
         } finally { sending = false; }
       },
-      stand() { if (!sending && !pending) { scene.stand(); release(); } },
+      toggleAuto() {
+        autoSpinning = !autoSpinning; setAutoSpin(autoSpinning);
+        if (!autoSpinning && autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
+        if (autoSpinning && active && !sending && !pending && performance.now() >= endAt) actions.current.spin?.(betRef.current);
+      },
+      stand() { autoSpinning = false; setAutoSpin(false); if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; } if (!sending && !pending) { scene.stand(); release(); } },
       dismiss() { clearMessageTimer(); setMessage(''); }
     };
     const tick = setInterval(() => {
@@ -137,19 +154,19 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance) {
       if (!sending && !pending && endAt && performance.now() >= endAt) {
         endAt = 0;
         if (pendingBalance !== null) { setBalance(pendingBalance); pendingBalance = null; }
-        setBusy(false); showResultMessage(resultText);
+        setBusy(false); showResultMessage(resultText); queueAutoSpin();
       }
       void refresh();
     }, 1000);
     scene.setSlotRefresh(refresh); void refresh();
     window.addEventListener('pagehide', release);
     return () => {
-      stopped = true; clearInterval(tick); if (messageTimer) clearTimeout(messageTimer); controllers.forEach(c => c.abort());
+      stopped = true; clearInterval(tick); if (messageTimer) clearTimeout(messageTimer); if (autoTimer) clearTimeout(autoTimer); controllers.forEach(c => c.abort());
       scene.setSlotRefresh(null); window.removeEventListener('pagehide', release);
       scene.stand(); release(); actions.current = {}; setSelected(null); setMessage(''); setRetry(false); setBusy(false);
     };
   }, [ready, sceneRef, token, setBalance]);
-  return { selected, message, busy, retry, bet, setBet,
+  return { selected, message, busy, retry, autoSpin, bet, setBet,
     claim: id => actions.current.claim?.(id), spin: () => actions.current.spin?.(bet),
-    stand: () => actions.current.stand?.(), dismiss: () => actions.current.dismiss?.() };
+    toggleAuto: () => actions.current.toggleAuto?.(), stand: () => actions.current.stand?.(), dismiss: () => actions.current.dismiss?.() };
 }

@@ -240,7 +240,7 @@ export default function createScene(host, events) {
         if (distance < best && direction.dot(focus) > 0.12) { nearest = option; best = distance; }
       });
     }
-    events.onStatus({ floor, x: pos.x, z: pos.z, yaw, prompt: seat ? 'Stand up' : nearest ? nearest.kind === 'face' ? 'Randomize face' : nearest.kind === 'reset' ? 'Ask for $1,000 reset' : nearest.kind === 'seat' ? `Sit · ${nearest.item.name}` : `Play · ${nearest.item.name}` : '', locked: document.pointerLockElement === canvas });
+    events.onStatus({ floor, x: pos.x, z: pos.z, yaw, prompt: seat ? seat.kind === 'slot' ? 'Leave slot · E' : 'Stand up' : nearest ? nearest.kind === 'face' ? 'Randomize face' : nearest.kind === 'reset' ? 'Ask for $1,000 reset' : nearest.kind === 'seat' ? `Sit · ${nearest.item.name}` : `Play · ${nearest.item.name}` : '', locked: document.pointerLockElement === canvas });
   }
   function resize() {
     const { width, height } = host.getBoundingClientRect();

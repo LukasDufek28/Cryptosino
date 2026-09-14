@@ -141,6 +141,7 @@
 .amber-slot-controls strong, .amber-slot-controls small { display: block; margin-bottom: 6px; }
 .amber-slot-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 14px 0; }
 .amber-slot-controls button { border: 1px solid #b99558; border-radius: 6px; background: #e1bb7c; color: #24372c; padding: 8px 12px; cursor: pointer; }
+.amber-slot-controls button.amber-auto-on { background: #87ad83; border-color: #c4e0a4; }
 .amber-slot-controls button:disabled { opacity: .55; cursor: default; }
 .amber-slot-controls input { width: 80px; padding: 7px; color: #f5e6c7; background: #182b24; border: 1px solid #b99558; }
 .amber-slot-controls details { font-size: 12px; margin: 10px 0; max-height: 220px; overflow: auto; }

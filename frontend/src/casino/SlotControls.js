@@ -2,7 +2,7 @@ import React from 'react';
 import configs from '../slots/config.json';
 
 export default function SlotControls({ slots }) {
-  const { selected, message, busy, retry } = slots;
+  const { selected, message, busy, retry, autoSpin } = slots;
   if (!selected && !message) return null;
   const config = selected && configs[selected.variant];
   return <section className="amber-slot-controls" aria-label="Slot machine controls" onPointerDown={e => e.stopPropagation()}>
@@ -11,7 +11,7 @@ export default function SlotControls({ slots }) {
       <div className="amber-slot-actions">
         <label>Stake $ <input type="number" min="0.1" max="1000000" step="0.1" value={slots.bet} disabled={busy || retry} onChange={e => slots.setBet(e.target.value)} /></label>
         <button disabled={busy} onClick={slots.spin}>{retry ? 'Recover spin' : busy ? 'Spinning…' : 'Spin'}</button>
-        <button disabled={busy || retry} onClick={slots.stand}>Stand up</button>
+        <button className={autoSpin ? 'amber-auto-on' : ''} disabled={retry} onClick={slots.toggleAuto}>{autoSpin ? 'Stop auto spin' : 'Auto spin'}</button>
       </div>
       <details><summary>Paytable & rules</summary>
         <p>{selected.variant === 'joker' ? 'All 243 paths pay left to right from reel 1. Joker substitutes for every fruit; only the best award on each path pays. Listed multipliers apply to one ways-unit of the total stake.' : `Stake is split over ${config.paylines.length} lines. Matching symbols pay left to right from reel 1. Wild substitutes; only the best award per line pays.`}</p>
