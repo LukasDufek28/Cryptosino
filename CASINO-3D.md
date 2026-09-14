@@ -101,6 +101,9 @@ street traffic clock. Local movement/camera are never replaced by a snapshot.
 Pressing T opens ephemeral room chat. Messages are capped at 100 characters,
 rate-limited, relayed over the reliable WebRTC event channel, and shown as
 five-second cartoon bubbles above avatars. Chat is never written to PostgreSQL.
+Live slot reels use dark in-world faces rather than bright white panels. Completed
+wins carry server-provided payline data so the exact winning symbols glow for
+five seconds for the player and everyone watching the machine.
 
 The 30ms interval is not a latency guarantee: host relaying, distance, jitter,
 browser scheduling and interpolation add delay. Setup may take several seconds.
