@@ -828,7 +828,8 @@ app.post('/api/slots/spin', authMiddleware, async (req, res) => {
       const startedAt = Date.now();
       const durationMs = respinInfo ? 6500 : variant === 'golden' ? 5000 : 4000;
       const publicSpin = { id: requestId, machineId: machineId || null, userId: req.user.id, username: req.user.username,
-        variant, startedAt, durationMs, visible, initialVisible, respin: respinInfo, wins, bet: wager, totalPayout: payout, mathVersion: config.mathVersion };
+        variant, startedAt, durationMs, visible, initialVisible, respin: respinInfo, wins, bet: wager,
+        balanceBefore: Number(user.balance), totalPayout: payout, mathVersion: config.mathVersion };
       const response = {
         ok: true, stops, visible, wins, initialVisible, mathVersion: config.mathVersion, spin: publicSpin,
         totalPayout: payout.toFixed(2),

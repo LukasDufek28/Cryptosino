@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import configs from '../slots/config.json';
 import { box, group, sign, stool } from './models';
 
-const icons = { JOKER: '★', '7': '7', BAR: 'BAR', BELL: '♟', WATER: '◆', CHERRY: '●●', BOOK: 'BOOK', SCARAB: '◆', ACE: 'A', KING: 'K', QUEEN: 'Q', JACK: 'J', TEN: '10' };
+const icons = { JOKER: '🃏', '7': '🍊', BAR: '🍇', BELL: '🔔', WATER: '🍋', CHERRY: '🍒', BOOK: 'BOOK', SCARAB: '◆', ACE: 'A', KING: 'K', QUEEN: 'Q', JACK: 'J', TEN: '10' };
 const colors = { JOKER: '#d09ade', '7': '#e36f62', BAR: '#8cafdc', BELL: '#e0b55d', WATER: '#79b992', CHERRY: '#dd7180', BOOK: '#dfbd70', SCARAB: '#72b9a7', ACE: '#e3c887', KING: '#d6bd83', QUEEN: '#d6bd83', JACK: '#d6bd83', TEN: '#d6bd83' };
 export default function liveSlotMachine(parent, machine, floorY) {
   const config = configs[machine.variant], g = group(parent, machine.x, floorY, machine.z);
@@ -75,7 +75,9 @@ export default function liveSlotMachine(parent, machine, floorY) {
         ctx.fillStyle = isWin ? `rgba(215, 174, 91, ${0.16 + glow * 0.2})` : row % 2 ? '#1c3029' : '#20372f';
         ctx.fillRect(8, y - 86, 176, 172);
         ctx.fillStyle = colors[symbol] || '#364d65'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.font = `bold ${symbol === 'BOOK' || symbol === 'BAR' ? 30 : rolling ? 56 : 64}px Georgia`;
+        const fruitStyle = ['JOKER', '7', 'BAR', 'BELL', 'WATER', 'CHERRY'].includes(symbol);
+        ctx.font = fruitStyle ? `${rolling ? 52 : 60}px "Segoe UI Emoji", "Apple Color Emoji", sans-serif`
+          : `bold ${symbol === 'BOOK' ? 30 : rolling ? 56 : 64}px Georgia`;
         ctx.globalAlpha = rolling ? 0.72 : 1;
         ctx.shadowColor = isWin ? '#ffd878' : 'transparent'; ctx.shadowBlur = isWin ? 12 + glow * 24 : 0;
         ctx.fillText(icons[symbol] || symbol, 96, y, 180);

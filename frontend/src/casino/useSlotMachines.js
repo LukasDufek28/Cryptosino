@@ -15,7 +15,7 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance) {
     if (!ready) return undefined;
     const scene = sceneRef.current, sessionId = crypto.randomUUID();
     let stopped = false, active = null, claiming = false, pending = null, sending = false;
-    let polling = false, refreshing = false, heartbeatAt = 0, endAt = 0, resultText = '';
+    let polling = false, refreshing = false, heartbeatAt = 0, endAt = 0, resultText = '', pendingBalance = null;
     let machines = [];
     const controllers = new Set();
     const request = async (path, method = 'GET', body) => {
@@ -100,14 +100,17 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance) {
           const result = await request('/api/slots/spin', 'POST', pending);
           pending = null;
           if (stopped) return;
-          setBalance(Number(result.newBalance));
           const spin = result.spin;
           const serverNow = result.serverNow || spin.startedAt;
           machines = [...machines.filter(m => m.id !== spin.machineId), { id: spin.machineId, spin, username: spin.username, userId: spin.userId }];
           scene.updateSlots(machines, serverNow);
           endAt = performance.now() + Math.max(0, spin.startedAt + spin.durationMs - serverNow);
+          pendingBalance = Number(result.newBalance);
           resultText = `Return $${Number(spin.totalPayout).toFixed(2)} (stake $${Number(spin.bet).toFixed(2)}).`;
-          setMessage('Reels spinning…'); scene.notifySlotChange(); void refresh();
+          if (spin.startedAt + spin.durationMs <= serverNow) {
+            endAt = 0; setBalance(pendingBalance); pendingBalance = null; setBusy(false); setMessage(resultText);
+          } else setMessage('Reels spinning…');
+          scene.notifySlotChange(); void refresh();
         } catch (error) {
           if (stopped) return;
           if (error.status >= 400 && error.status < 500) pending = null;
@@ -123,7 +126,9 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance) {
       if (active && scene.pose().seatId !== `seat-${active}`) release();
       if (active && performance.now() - heartbeatAt > 5000) void heartbeat();
       if (!sending && !pending && endAt && performance.now() >= endAt) {
-        endAt = 0; setBusy(false); setMessage(resultText);
+        endAt = 0;
+        if (pendingBalance !== null) { setBalance(pendingBalance); pendingBalance = null; }
+        setBusy(false); setMessage(resultText);
       }
       void refresh();
     }, 1000);
