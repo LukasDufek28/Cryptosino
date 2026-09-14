@@ -14,6 +14,12 @@ module.exports = function casinoRouter(authMiddleware) {
       res.json({ leaders: rows });
     } catch { res.status(503).json({ error: 'Leaderboard unavailable.' }); }
   });
+  router.get('/leaderboard/peak', async (req, res) => {
+    try {
+      const { rows } = await query('SELECT username, peak_balance FROM users ORDER BY peak_balance DESC, id ASC LIMIT 10');
+      res.json({ leaders: rows });
+    } catch { res.status(503).json({ error: 'Peak balance leaderboard unavailable.' }); }
+  });
   router.use('/browser-room', require('./browserRoom')(authMiddleware));
   router.use('/slots', require('../slots/machines').router(authMiddleware));
   router.put('/presence', authMiddleware, async (req, res) => {

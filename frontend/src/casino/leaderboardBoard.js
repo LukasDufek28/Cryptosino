@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { box, cylinder, group } from './models';
 
-export default function leaderboardBoard(parent) {
+export default function leaderboardBoard(parent, options = {}) {
+  const { position = [13.62, 2.15, 0.6], title = 'The high rollers', subtitle = 'TOP 10 · CURRENT CASINO BALANCE', valueKey = 'balance', columnTitle = 'BALANCE' } = options;
   // Right-hand interior wall when entering from the street; normal faces -X.
-  const frame = group(parent, 13.62, 2.15, 0.6, -Math.PI / 2);
+  const frame = group(parent, position[0], position[1], position[2], -Math.PI / 2);
   box(frame, [5.2, 3.44, 0.18], '#b79860', [0, 0, 0]);
   const canvas = document.createElement('canvas');
   canvas.width = 1240; canvas.height = 800;
@@ -26,13 +27,13 @@ export default function leaderboardBoard(parent) {
     ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
     ctx.fillStyle = '#d9bd85'; ctx.font = '600 19px sans-serif';
     ctx.fillText('THE AMBER HOUSE / HOUSE LEADERBOARD', 60, 64);
-    ctx.fillStyle = '#f2dfb9'; ctx.font = '48px Georgia'; ctx.fillText('The high rollers', 60, 119);
+    ctx.fillStyle = '#f2dfb9'; ctx.font = '48px Georgia'; ctx.fillText(title, 60, 119);
     ctx.font = '18px sans-serif'; ctx.fillStyle = '#b9c7b5';
-    ctx.fillText('TOP 10 · CURRENT CASINO BALANCE', 60, 166);
+    ctx.fillText(subtitle, 60, 166);
     ctx.fillStyle = '#112b23'; ctx.fillRect(42, 198, 1156, 42);
     ctx.fillStyle = '#c7d1bc'; ctx.font = '600 17px sans-serif';
     ctx.fillText('RANK', 60, 219); ctx.fillText('PLAYER', 168, 219);
-    ctx.textAlign = 'right'; ctx.fillText('BALANCE', 1170, 219);
+    ctx.textAlign = 'right'; ctx.fillText(columnTitle, 1170, 219);
     leaders.slice(0, 10).forEach((entry, index) => {
       const y = 267 + index * 44;
       ctx.fillStyle = index === 0 ? '#4d614445' : index % 2 ? '#ffffff06' : '#ffffff00';
@@ -42,7 +43,7 @@ export default function leaderboardBoard(parent) {
       ctx.font = '25px sans-serif'; ctx.fillStyle = '#f0e4ce';
       ctx.fillText(String(entry.username).slice(0, 32), 168, y, 620);
       ctx.textAlign = 'right'; ctx.font = '24px monospace';
-      const amount = Number(entry.balance);
+      const amount = Number(entry[valueKey]);
       ctx.fillText(Number.isFinite(amount) ? `$${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—', 1170, y, 345);
     });
     if (!leaders.length) {

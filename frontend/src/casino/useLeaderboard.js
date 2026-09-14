@@ -5,23 +5,27 @@ export default function useLeaderboard(sceneRef, ready) {
   useEffect(() => {
     const scene = sceneRef.current;
     if (!ready || !scene) return;
-    let stopped = false, timer, controller, lastLeaders = [], updatedAt = '';
+    let stopped = false, timer, controller, lastLeaders = [], lastPeakLeaders = [], updatedAt = '';
     async function refresh() {
       if (stopped) return;
       if (document.hidden) { timer = setTimeout(refresh, 5000); return; }
       controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 8000);
       try {
-        const response = await fetch(`${API}/api/casino/leaderboard`, { signal: controller.signal, cache: 'no-store' });
-        if (!response.ok) throw new Error('Leaderboard unavailable');
-        const data = await response.json();
-        if (!Array.isArray(data.leaders)) throw new Error('Invalid leaderboard');
+        const [response, peakResponse] = await Promise.all([
+          fetch(`${API}/api/casino/leaderboard`, { signal: controller.signal, cache: 'no-store' }),
+          fetch(`${API}/api/casino/leaderboard/peak`, { signal: controller.signal, cache: 'no-store' })
+        ]);
+        if (!response.ok || !peakResponse.ok) throw new Error('Leaderboard unavailable');
+        const [data, peakData] = await Promise.all([response.json(), peakResponse.json()]);
+        if (!Array.isArray(data.leaders) || !Array.isArray(peakData.leaders)) throw new Error('Invalid leaderboard');
         if (stopped) return;
         lastLeaders = data.leaders.slice(0, 10);
+        lastPeakLeaders = peakData.leaders.slice(0, 10);
         updatedAt = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        scene.updateLeaderboard({ leaders: lastLeaders, message: '', updatedAt });
+        scene.updateLeaderboard({ leaders: lastLeaders, peak: { leaders: lastPeakLeaders }, message: '', updatedAt });
       } catch {
-        if (!stopped) scene.updateLeaderboard({ leaders: lastLeaders, updatedAt,
+        if (!stopped) scene.updateLeaderboard({ leaders: lastLeaders, peak: { leaders: lastPeakLeaders }, updatedAt,
           message: updatedAt ? `OFFLINE · SHOWING LAST UPDATE AT ${updatedAt}` : 'Leaderboard unavailable · retrying shortly' });
       } finally {
         clearTimeout(timeout);

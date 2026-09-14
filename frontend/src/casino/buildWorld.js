@@ -116,6 +116,10 @@ export default function buildWorld(scene) {
   couch(building, 7, 0, 5); block(7, 5, 4, 1.4, 1);
   floorLamp(building, 9.8, 0, 5); plant(building, 12, 0, 8.4);
   const leaderboard = leaderboardBoard(building);
+  const peakLeaderboard = leaderboardBoard(building, {
+    position: [13.62, 2.15, -5.2], title: '🏆 Peak Balances',
+    subtitle: 'TOP 10 · ALL-TIME PERSONAL HIGHS', valueKey: 'peak_balance', columnTitle: 'PEAK'
+  });
 
   // A real reflection, with a separate camera layer for the first-person body.
   box(building, [3.3, 2.9, 0.18], '#b99861', [-5, 1.65, -9.65]);
@@ -163,5 +167,5 @@ export default function buildWorld(scene) {
     const m = new THREE.Mesh(new THREE.RingGeometry(0.43, 0.48, 32), new THREE.MeshBasicMaterial({ color: '#e4bc73', side: THREE.DoubleSide, transparent: true, opacity: 0.75 }));
     m.rotation.x = -Math.PI / 2; m.position.set(s.x, upper + 0.07, s.z + 2.5); building.add(m); return m;
   });
-  return { cars, obstacles, markers, mirror, faceButton, leaderboard, receptionist, resetButton, liveSlots };
+  return { cars, obstacles, markers, mirror, faceButton, leaderboard, peakLeaderboard, receptionist, resetButton, liveSlots };
 }
