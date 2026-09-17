@@ -123,7 +123,8 @@ export default function liveSlotMachine(parent, machine, floorY) {
   function drawScreen(now){
     const c=screen.ctx,w=LOGICAL_W,h=LOGICAL_H,spin=state?.spin;
     c.setTransform(DISPLAY_SCALE,0,0,DISPLAY_SCALE,0,0);
-    const elapsed=spin?Math.max(0,serverAt+now-clockAt-spin.startedAt):Infinity;
+    const presentationOffsetMs=Number(state?.presentationOffsetMs||0);
+    const elapsed=spin?Math.max(0,serverAt+now-clockAt-spin.startedAt+presentationOffsetMs):Infinity;
     const animating=Boolean(spin&&elapsed<spin.durationMs);
     const rounds=spin?.rounds?.length?spin.rounds:spin?[{visible:spin.visible,wins:spin.wins,roundPayout:spin.totalPayout,heldCells:[],lockedCells:[],newlyLocked:[]}]:[];
     const ri=rounds.length?(animating?Math.min(rounds.length-1,Math.floor(elapsed/ROUND_MS)):rounds.length-1):0;
@@ -186,15 +187,15 @@ export default function liveSlotMachine(parent, machine, floorY) {
     screen.texture.needsUpdate=true;
   }
   function frame(now){
-    const animated=state?.spin&&(serverAt+now-clockAt)<state.spin.startedAt+state.spin.durationMs;
+    const animated=state?.spin&&(serverAt+now-clockAt+Number(state?.presentationOffsetMs||0))<state.spin.startedAt+state.spin.durationMs;
     if(lastDraw<0||(animated&&now-lastDraw>=16)){drawScreen(now);lastDraw=now;}
     const ready=!ui.busy&&!animated;
     marqueeMesh.material.emissiveIntensity=animated?1.08:.98+.08*(.5+.5*Math.sin(now*.002));
     controls.forEach(b=>{
-      const action=b.userData.slotAction,active=action===hoverAction,pressed=action===pressedAction&&now<pressUntil,disabled=ui.busy&&action!=='info';
+      const action=b.userData.slotAction,active=action===hoverAction,pressed=action===pressedAction&&now<pressUntil,disabled=ui.busy&&action!=='info'&&action!=='spin';
       const targetY=b.userData.baseY-(pressed ? .025 : 0);b.position.y=THREE.MathUtils.lerp(b.position.y,targetY,.4);
       if(b.userData.face){b.userData.face.position.y=b.userData.baseFaceY+(b.position.y-b.userData.baseY);b.userData.face.material.opacity=disabled ? .42 : 1;}
-      let glow=.07;if(action==='spin'&&ready)glow=.18+.12*(.5+.5*Math.sin(now*.007));if(action==='toggleAuto'&&ui.autoSpin)glow=.34;if(action==='info'&&ui.showPaytable)glow=.30;if(active)glow=Math.max(glow,.25);if(pressed)glow=.45;if(disabled)glow=.025;
+      let glow=.07;if(action==='spin'&&animated)glow=.18+.08*(.5+.5*Math.sin(now*.011));else if(action==='spin'&&ready)glow=.18+.12*(.5+.5*Math.sin(now*.007));if(action==='toggleAuto'&&ui.autoSpin)glow=.34;if(action==='info'&&ui.showPaytable)glow=.30;if(active)glow=Math.max(glow,.25);if(pressed)glow=.45;if(disabled)glow=.025;
       b.material.emissiveIntensity=glow;b.material.color.copy(b.userData.baseColor).lerp(b.userData.accent,(active||pressed) ? .20 : 0);
     });
     if(now>=pressUntil) pressedAction=null;

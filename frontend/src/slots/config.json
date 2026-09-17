@@ -2624,5 +2624,132 @@
     "mathVersion": "amber-v2",
     "targetRtpPercent": 96,
     "custom": true
+  },
+  "olympus": {
+    "name": "Amber Olympus",
+    "mathVersion": "amber-olympus-v1",
+    "custom": true,
+    "previewOnly": true,
+    "rows": 5,
+    "cols": 6,
+    "payAnywhere": true,
+    "minMatch": 8,
+    "maxWinX": 5000,
+    "targetRtpPercent": 96.0,
+    "symbols": [
+      "BLUE",
+      "GREEN",
+      "YELLOW",
+      "PURPLE",
+      "RED",
+      "CHALICE",
+      "RING",
+      "HOURGLASS",
+      "CROWN",
+      "SCATTER",
+      "MULT"
+    ],
+    "weights": {
+      "BLUE": 18,
+      "GREEN": 17,
+      "YELLOW": 16,
+      "PURPLE": 15,
+      "RED": 13,
+      "CHALICE": 9,
+      "RING": 7,
+      "HOURGLASS": 5,
+      "CROWN": 3.5,
+      "SCATTER": 1.15,
+      "MULT": 0.9
+    },
+    "paytable": {
+      "BLUE": [
+        0.25,
+        0.75,
+        2
+      ],
+      "GREEN": [
+        0.4,
+        0.9,
+        4
+      ],
+      "YELLOW": [
+        0.5,
+        1,
+        5
+      ],
+      "PURPLE": [
+        0.8,
+        1.2,
+        8
+      ],
+      "RED": [
+        1,
+        1.5,
+        10
+      ],
+      "CHALICE": [
+        1.5,
+        2,
+        12
+      ],
+      "RING": [
+        2,
+        5,
+        15
+      ],
+      "HOURGLASS": [
+        2.5,
+        10,
+        25
+      ],
+      "CROWN": [
+        10,
+        25,
+        50
+      ]
+    },
+    "scatterPays": {
+      "4": 3,
+      "5": 5,
+      "6": 100
+    },
+    "multiplierValues": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      8,
+      10,
+      12,
+      15,
+      20,
+      25,
+      50,
+      100,
+      250,
+      500
+    ],
+    "multiplierWeights": [
+      28,
+      24,
+      18,
+      14,
+      10,
+      7,
+      5,
+      4,
+      3,
+      2.3,
+      1.8,
+      1,
+      0.55,
+      0.18,
+      0.06
+    ],
+    "freeSpins": 15,
+    "retriggerScatters": 3,
+    "retriggerSpins": 5
   }
 }

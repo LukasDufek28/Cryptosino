@@ -798,6 +798,7 @@ app.post('/api/slots/spin', authMiddleware, async (req, res) => {
   if (!Number.isFinite(wager) || wager < 0.1 || wager > 1000000 || Math.abs(wager * 100 - Math.round(wager * 100)) > 0.00001 || !slotMachines.uuid(requestId)) return res.status(400).json({ error: 'Invalid bet or request ID' });
   const config = Object.prototype.hasOwnProperty.call(SLOTS_CONFIG, variant) ? SLOTS_CONFIG[variant] : null;
   if (!config) return res.status(400).json({ error: 'Invalid variant' });
+  if (config.previewOnly) return res.status(409).json({ error: 'This slot is currently in preview mode.' });
 
   const serverSeed = process.env.SERVER_SEED || 'default-server-seed';
   const seed = typeof clientSeed === 'string' ? clientSeed.slice(0, 128) : crypto.randomBytes(16).toString('hex');

@@ -3,6 +3,7 @@ import { Reflector } from 'three/examples/jsm/objects/Reflector.js';
 import layout from './worldLayout.json';
 import leaderboardBoard from './leaderboardBoard';
 import liveSlotMachine from './liveSlotMachine';
+import liveOlympusMachine from './liveOlympusMachine';
 import tradingFacility from './tradingFacility';
 import { box, cylinder, group, mesh, sign, plant, couch, floorLamp, pendant, slotMachine, gameTable, car, receptionist as receptionistModel } from './models';
 
@@ -151,7 +152,7 @@ export default function buildWorld(scene) {
   });
   const liveSlots = layout.slotMachines.map(m => {
     block(m.x, m.z, 1.94, 1.05, 2);
-    return liveSlotMachine(building, m, upper);
+    return m.variant === 'olympus' ? liveOlympusMachine(building, m, upper) : liveSlotMachine(building, m, upper);
   });
   layout.seats.filter(s => s.kind !== 'slot').forEach(s => {
     box(building, [5.9, 0.026, 4.5], '#b08565', [s.x, upper + 0.03, s.z + 0.9]);

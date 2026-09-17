@@ -1,5 +1,6 @@
 import layout from './worldLayout.json';
 import casinoVersion from './version.json';
+import slotConfigs from '../slots/config.json';
 
 const API = process.env.REACT_APP_API_URL || '';
 const TICK_MS = 30;
@@ -8,11 +9,14 @@ const validSequence = n => Number.isSafeInteger(n) && n >= 0;
 const cleanChat = value => typeof value === 'string' && value.trim().length > 0 && value.length <= 100 ? value.trim() : null;
 const slotMachine = id => layout.slotMachines.find(machine => machine.id === id);
 const cleanSlotSpin = (spin, member, machine) => {
-  if (!spin || typeof spin !== 'object' || spin.machineId !== machine.id || spin.variant !== machine.variant ||
+  const config = slotConfigs[machine.variant];
+  const cols = Number(config?.cols || config?.reels?.length || 0);
+  const rows = Number(config?.rows || 0);
+  if (!spin || typeof spin !== 'object' || !cols || !rows || spin.machineId !== machine.id || spin.variant !== machine.variant ||
       spin.userId !== member.id || spin.username !== member.username || typeof spin.id !== 'string' ||
       !Number.isFinite(spin.startedAt) || !Number.isFinite(spin.durationMs) || spin.durationMs < 1000 || spin.durationMs > 65000 ||
       !Number.isFinite(Number(spin.bet)) || !Number.isFinite(Number(spin.totalPayout)) || !Number.isFinite(Number(spin.balanceBefore)) ||
-      !Array.isArray(spin.visible) || spin.visible.length !== 5 || spin.visible.some(reel => !Array.isArray(reel) || reel.length !== 3)) return null;
+      !Array.isArray(spin.visible) || spin.visible.length !== cols || spin.visible.some(reel => !Array.isArray(reel) || reel.length !== rows)) return null;
   return spin;
 };
 
@@ -97,10 +101,12 @@ export default function browserRoom(token, scene, onStatus) {
       const occupant = roster.get(state.sessionId);
       const spinMember = [...roster.values()].find(member => member.id === state.spin?.userId);
       const spin = spinMember ? cleanSlotSpin(state.spin, spinMember, machine) : null;
+      const presentationOffsetMs = spin && Number.isFinite(Number(state.presentationOffsetMs))
+        ? Math.max(0, Math.min(Number(state.presentationOffsetMs), Math.max(0, spin.durationMs - 250))) : 0;
       slotMachines.set(machine.id, { id: machine.id,
         ...(occupant && occupant.id === state.userId && occupant.username === state.username
           ? { sessionId: state.sessionId, userId: occupant.id, username: occupant.username } : {}),
-        spin });
+        spin, presentationOffsetMs });
     }
     scene.receiveSlotState(slotState()); status();
   }
@@ -116,7 +122,7 @@ export default function browserRoom(token, scene, onStatus) {
     let changed = false;
     for (const [id, state] of slotMachines) {
       if (state.sessionId && !roster.has(state.sessionId)) {
-        slotMachines.set(id, { id, spin: state.spin || null }); changed = true;
+        slotMachines.set(id, { id, spin: state.spin || null, presentationOffsetMs: state.presentationOffsetMs || 0 }); changed = true;
       }
     }
     if (changed) publishSlotState();
@@ -131,15 +137,25 @@ export default function browserRoom(token, scene, onStatus) {
     if (packet.action === 'claim') {
       if (current?.sessionId && current.sessionId !== sender) return { ok: false, error: 'Someone is already using this machine.' };
       if ([...slotMachines.values()].some(state => state.id !== machine.id && state.sessionId === sender)) return { ok: false, error: 'Stand up from your other machine first.' };
-      slotMachines.set(machine.id, { id: machine.id, userId: member.id, username: member.username, sessionId: sender, spin: current?.spin || null });
+      slotMachines.set(machine.id, { id: machine.id, userId: member.id, username: member.username, sessionId: sender,
+        spin: current?.spin || null, presentationOffsetMs: current?.presentationOffsetMs || 0 });
     } else if (packet.action === 'release') {
-      if (current?.sessionId === sender) slotMachines.set(machine.id, { id: machine.id, spin: current.spin || null });
+      if (current?.sessionId === sender) slotMachines.set(machine.id, { id: machine.id, spin: current.spin || null,
+        presentationOffsetMs: current.presentationOffsetMs || 0 });
     } else if (packet.action === 'spin') {
       if (current?.sessionId !== sender) return { ok: false, error: 'Sit at this machine again before spinning.' };
       const spin = cleanSlotSpin(packet.spin, member, machine);
       if (!spin) return { ok: false, error: 'Invalid shared spin result.' };
       if (Number.isFinite(packet.serverNow)) slotServerOffset = packet.serverNow - Date.now();
-      slotMachines.set(machine.id, { ...current, spin });
+      slotMachines.set(machine.id, { ...current, spin, presentationOffsetMs: 0 });
+    } else if (packet.action === 'hurry') {
+      if (current?.sessionId !== sender || !current?.spin) return { ok: false, error: 'No active spin to speed up.' };
+      const serverNow = Date.now() + slotServerOffset;
+      const effectiveElapsed = serverNow - current.spin.startedAt + Number(current.presentationOffsetMs || 0);
+      if (effectiveElapsed >= current.spin.durationMs - 250) return { ok: true, state: slotState() };
+      const amount = Math.max(250, Math.min(1000, Number(packet.amountMs) || 650));
+      const maxOffset = Math.max(0, current.spin.durationMs - 250);
+      slotMachines.set(machine.id, { ...current, presentationOffsetMs: Math.min(maxOffset, Number(current.presentationOffsetMs || 0) + amount) });
     } else return { ok: false, error: 'Invalid slot command.' };
     publishSlotState();
     return { ok: true, state: slotState() };

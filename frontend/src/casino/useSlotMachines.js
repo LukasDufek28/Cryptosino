@@ -88,16 +88,33 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance, bala
           if (!LOCAL_DEMO) await scene.requestSlot('claim', { machineId: id });
           if (stopped) return;
           active = id; endAt = 0; resultText = ''; setShowPaytable(false);
-          scene.sitAtSlot(id); startSlotAmbience(); setSelected(layout.slotMachines.find(machine => machine.id === id));
-          setMessage('Choose your stake and spin.'); setBusy(false);
+          const selectedMachine = layout.slotMachines.find(machine => machine.id === id);
+          scene.sitAtSlot(id); startSlotAmbience(); setSelected(selectedMachine);
+          setMessage(selectedMachine?.variant === 'olympus' ? 'Olympus preview is online; tumble gameplay tuning continues.' : 'Choose your stake and spin.'); setBusy(false);
         } catch (error) { if (!stopped) setMessage(error.message); }
         finally { claiming = false; }
       },
       async spin(wager) {
-        if (stopped || sending || (!pending && (!active || performance.now() < endAt))) return;
+        if (stopped || sending) return;
+        const now = performance.now();
+        if (!pending && active && now < endAt) {
+          if (LOCAL_DEMO) {
+            machines = machines.map(item => item.id === active
+              ? { ...item, presentationOffsetMs: Math.min(Math.max(0, item.spin?.durationMs - 250), Number(item.presentationOffsetMs || 0) + 650) }
+              : item);
+            scene.updateSlots(machines, Date.now());
+          } else {
+            const previousEnd = endAt;
+            endAt = Math.max(now + 250, endAt - 650);
+            void scene.requestSlot('hurry', { machineId: active, amountMs: 650 }).catch(() => { endAt = Math.max(endAt, previousEnd); });
+          }
+          return;
+        }
+        if (!pending && !active) return;
         setShowPaytable(false);
         clearMessageTimer();
         const machine = layout.slotMachines.find(item => item.id === active);
+        if (machine?.variant === 'olympus') { setMessage('Olympus preview is online; tumble gameplay is still being tuned.'); return; }
         if (!pending) {
           const amount = Number(wager);
           if (!Number.isFinite(amount) || amount < 0.1 || amount > 1000000 || Math.abs(amount * 100 - Math.round(amount * 100)) > 0.00001) {
