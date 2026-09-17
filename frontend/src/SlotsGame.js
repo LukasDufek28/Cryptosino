@@ -3,6 +3,7 @@ import React, {
 } from 'react';
 import './SlotsGame.css';
 import configs from './slots/config.json';
+import { LOCAL_DEMO, demoSlotSpin } from './casino/demoCasino';
 
 const API_URL = process.env.REACT_APP_API_URL || '';
 
@@ -301,8 +302,9 @@ export default function SlotsGame({ balance, setBalance, token }) {
     // Fetch result AND enforce minimum visual spin time in parallel
     let result;
     try {
-      const [data] = await Promise.all([
-        fetch(`${API_URL}/api/slots/spin`, {
+      const resultPromise = LOCAL_DEMO && !token
+        ? Promise.resolve(demoSlotSpin({ variant, bet: wager, balance, machineId: `classic-${variant}` }))
+        : fetch(`${API_URL}/api/slots/spin`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify(pendingRequest.current),
@@ -311,9 +313,8 @@ export default function SlotsGame({ balance, setBalance, token }) {
           const d = await r.json();
           if (!r.ok) { const error = new Error(d.error || 'Spin failed'); error.status = r.status; throw error; }
           return d;
-        }),
-        new Promise(resolve => setTimeout(resolve, MIN_SPIN_MS)),
-      ]);
+        });
+      const [data] = await Promise.all([resultPromise, new Promise(resolve => setTimeout(resolve, MIN_SPIN_MS))]);
       result = data;
       pendingRequest.current = null; setRecovering(false);
     } catch (e) {

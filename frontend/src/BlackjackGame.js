@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './BlackjackGame.css';
 
 const API_URL = process.env.REACT_APP_API_URL || '';
@@ -74,6 +74,7 @@ function BlackjackGame({ balance, setBalance, token }) {
   const [pendingStand, setPendingStand] = useState(null);
   // When true, dealer cards use flip/deal animations for the stand reveal sequence
   const [standMode, setStandMode] = useState(false);
+  const demoDeckRef = useRef([]);
 
   // Apply a hit result once the new card has landed
   useEffect(() => {
@@ -102,7 +103,21 @@ function BlackjackGame({ balance, setBalance, token }) {
   }, [revealedDealer, pendingStand, setBalance]);
 
   const stand = async (overrideId) => {
-    if (!token) { setMessage('Login for persistent blackjack.'); return; }
+    if (!token) {
+      setResolving(true);
+      const dealer = [...dealerHand];
+      while (handValue(dealer) < 17 && demoDeckRef.current.length) dealer.push(demoDeckRef.current.pop());
+      const playerValue = handValue(playerHand), dealerValue = handValue(dealer), wager = Number(bet);
+      const playerBlackjack = playerHand.length === 2 && playerValue === 21;
+      const dealerBlackjack = dealer.length === 2 && dealerValue === 21;
+      let payout = 0, msg = '💀 You lose.';
+      if (playerBlackjack && !dealerBlackjack) { payout = wager * 2.5; msg = `🎉 Blackjack! Paid $${payout.toFixed(2)} (3:2)`; }
+      else if (playerValue <= 21 && (dealerValue > 21 || playerValue > dealerValue)) { payout = wager * 2; msg = `✅ You win! Payout $${payout.toFixed(2)}`; }
+      else if (playerValue <= 21 && playerValue === dealerValue) { payout = wager; msg = `🤝 Push. Returned $${payout.toFixed(2)}`; }
+      setStandMode(true); setFinished(true); setDealerHand(dealer); setRevealedDealer(1);
+      setPendingStand({ message: msg, newBalance: Number((Number(balance) + payout).toFixed(2)), targetCount: dealer.length });
+      return;
+    }
     const idToUse = overrideId || betId;
     if (!idToUse) { setMessage('Missing betId'); return; }
     setResolving(true);
@@ -181,6 +196,7 @@ function BlackjackGame({ balance, setBalance, token }) {
       }
       const player = [deck.pop(), deck.pop()];
       const dealer = [deck.pop(), deck.pop()];
+      demoDeckRef.current = deck;
       setPlayerHand(player);
       setDealerHand(dealer);
       setBalance(prev => Number((prev - wager).toFixed(2)));
@@ -191,7 +207,19 @@ function BlackjackGame({ balance, setBalance, token }) {
   };
 
   const hit = async () => {
-    if (!token) { setMessage('Login for persistent blackjack.'); return; }
+    if (!token) {
+      const card = demoDeckRef.current.pop();
+      if (!card) return;
+      const next = [...playerHand, card];
+      setPlayerHand(next);
+      const value = handValue(next);
+      if (value > 21) {
+        setPendingResult({ message: '💥 Bust! You lose.', dealerHand: dealerHand, newBalance: null, targetCount: next.length });
+      } else if (value === 21) {
+        setMessage('21! Stand to resolve.');
+      }
+      return;
+    }
     const res = await fetch(`${API_URL}/api/blackjack/hit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },

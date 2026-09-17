@@ -786,7 +786,7 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // ===================== SLOTS =====================
-// Two variants: 'joker' (5×3, 243 ways + chained sticky respins) and 'golden' (5×3, book scatter)
+// Two variants: 'joker' (4×3, 81 ways + chained sticky respins) and 'golden' (5×3, book scatter)
 
 const { SLOTS_CONFIG, spinRound } = require('./slots/math');
 const slotMachines = require('./slots/machines');
@@ -840,7 +840,7 @@ app.post('/api/slots/spin', authMiddleware, async (req, res) => {
         [user.id, `slots_${variant}`, wager, payout, JSON.stringify({ stops, winCount: wins.length, totalPayout: payout, mathVersion: config.mathVersion, requestId, machineId })]
       );
       const startedAt = Date.now();
-      const durationMs = variant === 'joker' ? Math.max(4000, (rounds?.length || 1) * 4000) : 5000;
+      const durationMs = variant === 'joker' ? Math.max(2850, (rounds?.length || 1) * 2850) : 3600;
       const publicSpin = { id: requestId, machineId: machineId || null, userId: req.user.id, username: req.user.username,
         variant, startedAt, durationMs, visible, initialVisible, rounds, respin: respinInfo, wins, bet: wager,
         balanceBefore: Number(user.balance), totalPayout: payout, mathVersion: config.mathVersion };

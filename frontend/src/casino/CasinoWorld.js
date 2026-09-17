@@ -10,6 +10,7 @@ import TradingDesk from './TradingDesk';
 import useSlotMachines from './useSlotMachines';
 import layout from './worldLayout.json';
 import casinoVersion from './version.json';
+import { LOCAL_DEMO } from './demoCasino';
 import './CasinoWorld.css';
 
 const games = {
@@ -84,8 +85,13 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
   const openSlotRef = useRef(null);
   const resetBalanceRef = useRef(null);
   const resetBusyRef = useRef(false);
-  openGameRef.current = game => { setActiveGame(game); setPanel(token && user ? (game === 'trading' ? 'trading' : 'game') : 'auth'); };
+  openGameRef.current = game => {
+    setActiveGame(game);
+    if (game === 'trading') setPanel(token && user ? 'trading' : 'auth');
+    else setPanel(LOCAL_DEMO || (token && user) ? 'game' : 'auth');
+  };
   resetBalanceRef.current = async () => {
+    if (LOCAL_DEMO && !token) { setBalance(1000); setReceptionMessage('Demo balance restored to $1,000.'); return; }
     if (!token) { setActiveGame(null); setPanel('auth'); return; }
     if (Number(balance) >= 1000) return;
     if (resetBusyRef.current) return;
@@ -123,9 +129,9 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
   useLeaderboard(sceneRef, ready);
   const tradingMarket = useTradingMarket(sceneRef, ready);
   const slots = useSlotMachines(sceneRef, ready, token, setBalance, balance);
-  openSlotRef.current = id => { if (!token) { setActiveGame(null); setPanel('auth'); } else slots.claim(id); };
+  openSlotRef.current = id => { if (!token && !LOCAL_DEMO) { setActiveGame(null); setPanel('auth'); } else slots.claim(id); };
   // Signing out also closes any retained authenticated game screen.
-  useEffect(() => { if (!token) setPanel(current => ['game', 'trading'].includes(current) ? null : current); }, [token]);
+  useEffect(() => { if (!token && !LOCAL_DEMO) setPanel(current => ['game', 'trading'].includes(current) ? null : current); }, [token]);
   useEffect(() => { sceneRef.current?.setEnabled(!welcome && !panel && !chatOpen && !error); }, [welcome, panel, chatOpen, error, ready]);
   useEffect(() => {
     const openChat = event => {
@@ -136,6 +142,7 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
     document.addEventListener('keydown', openChat);
     return () => document.removeEventListener('keydown', openChat);
   }, [welcome, panel, chatOpen, error]);
+  useEffect(() => { if (LOCAL_DEMO && !user && Number(balance) <= 0) setBalance(1000); }, [user, balance, setBalance]);
   const closePanel = useCallback(() => setPanel(null), []);
   const start = () => { setWelcome(false); sceneRef.current?.setEnabled(true); sceneRef.current?.lock(); };
   const Game = activeGame ? games[activeGame] : null;
@@ -150,7 +157,7 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
         <button className="amber-nav-button" onClick={openDirectory}>The collection <span>↗</span></button>
         <button className="amber-icon-button" onClick={() => setShowMap(v => !v)} aria-label="Toggle floor map" aria-pressed={showMap}>⌖</button>
         {user ? <><span className="amber-wallet">${Number(balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span><button className="amber-nav-button" onClick={() => setPanel('account')}>{user.username}</button></>
-          : <button className="amber-pill" onClick={() => { setWelcome(false); setPanel('auth'); }}>Sign in <span>↗</span></button>}
+          : <>{LOCAL_DEMO && <span className="amber-wallet">DEMO ${Number(balance).toFixed(2)}</span>}<button className="amber-pill" onClick={() => { setWelcome(false); setPanel('auth'); }}>Sign in <span>↗</span></button></>}
       </nav>
     </header>
     <div className="amber-location"><span className="amber-live-dot"/><span>{presence.mode === 'shared' ? `${presence.count} guests · ${presence.role === 'host' ? 'You are hosting' : 'Browser hosted'} · 30 ms send interval` : 'Your evening, your pace'}</span><span className="amber-location-divider">/</span><span>GOLDEN HOUR</span></div>

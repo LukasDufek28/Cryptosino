@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import layout from './worldLayout.json';
+import { LOCAL_DEMO, demoSlotSpin } from './demoCasino';
+import { startSlotAmbience, stopSlotAmbience } from './slotAudio';
 
 const API = process.env.REACT_APP_API_URL || '';
 const BET_STEPS = [0.1,0.2,0.5,1,2,5,10,20,50,100,200,500,1000];
@@ -14,6 +16,7 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance, bala
   const [busy, setBusy] = useState(false);
   const [retry, setRetry] = useState(false);
   const [autoSpin, setAutoSpin] = useState(false);
+  const [showPaytable, setShowPaytable] = useState(false);
   const [bet, setBet] = useState('10');
   const betRef = useRef(bet), balanceRef = useRef(balance);
   betRef.current = bet; balanceRef.current = balance;
@@ -48,9 +51,9 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance, bala
     void scene.requestSlot('sync').catch(() => {});
     const release = () => {
       const id = active; active = null;
-      autoSpinning = false; setAutoSpin(false); if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
+      autoSpinning = false; setAutoSpin(false); setShowPaytable(false); stopSlotAmbience(); if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
       if (!stopped) { setSelected(null); setBusy(false); }
-      if (id) void scene.requestSlot('release', { machineId: id }).catch(() => {});
+      if (id && !LOCAL_DEMO) void scene.requestSlot('release', { machineId: id }).catch(() => {});
     };
     const showResultMessage = text => {
       if (messageTimer) clearTimeout(messageTimer);
@@ -77,21 +80,22 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance, bala
       },
       async claim(id) {
 
-        if (claiming || sending || pending || stopped || !token) return;
+        if (claiming || sending || pending || stopped || (!token && !LOCAL_DEMO)) return;
         if (active === id) return;
         if (active) { setMessage('Stand up before changing machines.'); return; }
         claiming = true; clearMessageTimer(); setMessage('Reserving machine…');
         try {
-          await scene.requestSlot('claim', { machineId: id });
+          if (!LOCAL_DEMO) await scene.requestSlot('claim', { machineId: id });
           if (stopped) return;
-          active = id; endAt = 0; resultText = '';
-          scene.sitAtSlot(id); setSelected(layout.slotMachines.find(machine => machine.id === id));
+          active = id; endAt = 0; resultText = ''; setShowPaytable(false);
+          scene.sitAtSlot(id); startSlotAmbience(); setSelected(layout.slotMachines.find(machine => machine.id === id));
           setMessage('Choose your stake and spin.'); setBusy(false);
         } catch (error) { if (!stopped) setMessage(error.message); }
         finally { claiming = false; }
       },
       async spin(wager) {
         if (stopped || sending || (!pending && (!active || performance.now() < endAt))) return;
+        setShowPaytable(false);
         clearMessageTimer();
         const machine = layout.slotMachines.find(item => item.id === active);
         if (!pending) {
@@ -99,17 +103,20 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance, bala
           if (!Number.isFinite(amount) || amount < 0.1 || amount > 1000000 || Math.abs(amount * 100 - Math.round(amount * 100)) > 0.00001) {
             setMessage('Use a stake from $0.10 to $1,000,000, with at most two decimals.'); return;
           }
+          if (LOCAL_DEMO && amount > Number(balanceRef.current)) { setMessage('Insufficient demo balance.'); return; }
           pending = { bet: amount, variant: machine.variant, machineId: active, requestId: crypto.randomUUID() };
         }
         sending = true; setBusy(true); setRetry(false); setMessage('Waiting for the casino…');
         try {
-          const result = await request('/api/slots/spin', pending);
+          const result = LOCAL_DEMO && !token
+            ? demoSlotSpin({ variant: machine.variant, bet: pending.bet, balance: balanceRef.current, machineId: active })
+            : await request('/api/slots/spin', pending);
           pending = null;
           if (stopped) return;
           const spin = result.spin, serverNow = result.serverNow || spin.startedAt;
           machines = [...machines.filter(item => item.id !== spin.machineId), { id: spin.machineId, spin, username: spin.username, userId: spin.userId }];
           scene.updateSlots(machines, serverNow);
-          void scene.requestSlot('spin', { machineId: active, spin, serverNow }).catch(() => {});
+          if (!LOCAL_DEMO) void scene.requestSlot('spin', { machineId: active, spin, serverNow }).catch(() => {});
           endAt = performance.now() + Math.max(0, spin.startedAt + spin.durationMs - serverNow);
           pendingBalance = Number(result.newBalance);
           resultText = `Return $${Number(spin.totalPayout).toFixed(2)} (stake $${Number(spin.bet).toFixed(2)}).`;
@@ -125,13 +132,14 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance, bala
           setBusy(false);
         } finally { sending = false; }
       },
+      info() { if (!active || sending || pending) return; setShowPaytable(value => !value); },
       toggleAuto() {
         autoSpinning = !autoSpinning; setAutoSpin(autoSpinning);
         if (!autoSpinning && autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
         if (autoSpinning && active && !sending && !pending && performance.now() >= endAt) actions.current.spin?.(betRef.current);
       },
       stand() {
-        autoSpinning = false; setAutoSpin(false); if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
+        autoSpinning = false; setAutoSpin(false); setShowPaytable(false); stopSlotAmbience(); if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
         if (!sending && !pending) { scene.stand(); release(); }
       },
       dismiss() { clearMessageTimer(); setMessage(''); }
@@ -155,9 +163,9 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance, bala
   useEffect(() => {
     if (!ready || !selected) return;
     sceneRef.current?.updateSlotControlState(selected.id, {
-      bet: Number(bet) || 0.1, autoSpin, busy, retry, balance: Number(balance), message
+      bet: Number(bet) || 0.1, autoSpin, showPaytable, busy, retry, balance: Number(balance), message
     });
-  }, [ready, sceneRef, selected, bet, autoSpin, busy, retry, balance, message]);
+  }, [ready, sceneRef, selected, bet, autoSpin, showPaytable, busy, retry, balance, message]);
   return { selected, message, busy, retry, autoSpin, bet, setBet,
     claim: id => actions.current.claim?.(id), spin: () => actions.current.spin?.(bet),
     toggleAuto: () => actions.current.toggleAuto?.(), stand: () => actions.current.stand?.(), dismiss: () => actions.current.dismiss?.() };
