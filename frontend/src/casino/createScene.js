@@ -39,18 +39,20 @@ export default function createScene(host, events) {
   const peers = new Map();
   const pos = new THREE.Vector3(layout.spawn.x, layout.spawn.y, layout.spawn.z);
   let yaw = layout.spawn.yaw, pitch = -0.05, floor = 2, seat = null;
-  let slotCommand = null, slotStateReceiver = null;
+  let slotCommand = null, slotStateReceiver = null, slotAction = null, slotHover = null;
   let traversingStairs = false;
   let jumpHeight = 0, jumpVelocity = 0;
   const gravity = 18, jumpSpeed = 5.5;
   const playerRadius = 0.45;
   let enabled = true, disposed = false, last = 0, uiAt = 0, nearest = null;
   let chatSender = null;
-  let dragging = false, lastX = 0, lastY = 0, moved = false;
+  let dragging = false, lastX = 0, lastY = 0, moved = false, cursorX = null, cursorY = null;
   let dragPointer = null, skipLockedMove = true;
   const keys = new Set();
   const direction = new THREE.Vector3();
   const focus = new THREE.Vector3();
+  const raycaster = new THREE.Raycaster(); raycaster.far = 3.2;
+  const pointer = new THREE.Vector2();
   const touch = { x: 0, y: 0 };
   const clamp = THREE.MathUtils.clamp;
   function unlock() { if (document.pointerLockElement === canvas) document.exitPointerLock(); }
@@ -64,9 +66,34 @@ export default function createScene(host, events) {
     if (!canvas.requestPointerLock || window.matchMedia('(pointer: coarse)').matches) return;
     try { const request = canvas.requestPointerLock(); if (request?.catch) request.catch(() => {}); } catch { /* drag-to-look remains available */ }
   }
+  function activeSlotMachine() {
+    return seat?.kind === 'slot' ? world.liveSlots.find(machine => machine.id === seat.machineId) : null;
+  }
+  function setSlotHover(action) {
+    if (slotHover === action) return;
+    slotHover = action || null;
+    world.liveSlots.forEach(machine => machine.setHover(machine.id === seat?.machineId ? slotHover : null));
+  }
+  function updateSlotHover(clientX = null, clientY = null) {
+    const machine = activeSlotMachine();
+    if (!machine) { setSlotHover(null); return; }
+    if (document.pointerLockElement === canvas || (clientX === null && cursorX === null)) pointer.set(0, 0);
+    else {
+      const rect = canvas.getBoundingClientRect(), px = clientX ?? cursorX, py = clientY ?? cursorY;
+      pointer.set(((px - rect.left) / rect.width) * 2 - 1, -((py - rect.top) / rect.height) * 2 + 1);
+    }
+    raycaster.setFromCamera(pointer, camera);
+    const hit = raycaster.intersectObjects(machine.controls, false)[0];
+    setSlotHover(hit?.object?.userData?.slotAction || null);
+  }
+  function triggerSlotControl() {
+    const machine = activeSlotMachine();
+    if (!machine || !slotHover || !slotAction) return false;
+    machine.press(slotHover); slotAction(slotHover); return true;
+  }
   function stand() {
     if (!seat) return;
-    pos.set(seat.exitX, layout.upperFloor, seat.exitZ); seat = null;
+    pos.set(seat.exitX, layout.upperFloor, seat.exitZ); seat = null; setSlotHover(null);
     poseRevision += 1;
     events.onSeat(null);
   }
@@ -129,9 +156,17 @@ export default function createScene(host, events) {
   }
   function lockChanged() { clearInput(); skipLockedMove = true; }
   function visibilityChanged() { if (document.hidden) clearInput(); skipLockedMove = true; }
-  function pointerDown(e) { if (!enabled || !e.isPrimary || e.button !== 0 || document.pointerLockElement === canvas) return; dragging = true; dragPointer = e.pointerId; lastX = e.clientX; lastY = e.clientY; moved = false; canvas.setPointerCapture(e.pointerId); }
+  function pointerDown(e) {
+    if (!enabled || !e.isPrimary || e.button !== 0) return;
+    cursorX = e.clientX; cursorY = e.clientY;
+    if (seat?.kind === 'slot') { updateSlotHover(e.clientX, e.clientY); if (triggerSlotControl()) { e.preventDefault(); return; } }
+    if (document.pointerLockElement === canvas) return;
+    dragging = true; dragPointer = e.pointerId; lastX = e.clientX; lastY = e.clientY; moved = false; canvas.setPointerCapture(e.pointerId);
+  }
   function pointerMove(e) {
     if (!enabled || document.hidden) return;
+    cursorX = e.clientX; cursorY = e.clientY;
+    if (seat?.kind === 'slot' && document.pointerLockElement !== canvas) updateSlotHover(e.clientX, e.clientY);
     if (document.pointerLockElement === canvas) {
       if (skipLockedMove) { skipLockedMove = false; return; }
       look(e.movementX, e.movementY);
@@ -241,7 +276,11 @@ export default function createScene(host, events) {
         if (distance < best && direction.dot(focus) > 0.12) { nearest = option; best = distance; }
       });
     }
-    events.onStatus({ floor, x: pos.x, z: pos.z, yaw, prompt: seat ? seat.kind === 'slot' ? 'Leave slot · E' : 'Stand up' : nearest ? nearest.kind === 'face' ? 'Randomize face' : nearest.kind === 'reset' ? 'Ask for $1,000 reset' : nearest.kind === 'seat' ? `Sit · ${nearest.item.name}` : `Play · ${nearest.item.name}` : '', locked: document.pointerLockElement === canvas });
+    const slotLabels = { spin: 'SPIN', toggleAuto: 'AUTO', maxBet: 'MAX BET', betUp: 'BET +', betDown: 'BET −' };
+    let prompt = '';
+    if (seat) prompt = seat.kind === 'slot' ? (slotHover ? `Click · ${slotLabels[slotHover] || 'CONTROL'}` : 'Aim at the cabinet controls · E to leave') : 'Stand up';
+    else if (nearest) prompt = nearest.kind === 'face' ? 'Randomize face' : nearest.kind === 'reset' ? 'Ask for $1,000 reset' : nearest.kind === 'seat' ? `Sit · ${nearest.item.name}` : `Play · ${nearest.item.name}`;
+    events.onStatus({ floor, x: pos.x, z: pos.z, yaw, prompt, locked: document.pointerLockElement === canvas });
   }
   function resize() {
     const { width, height } = host.getBoundingClientRect();
@@ -294,6 +333,7 @@ export default function createScene(host, events) {
       self.updateChat(now);
       world.receptionist.trackNearest([self.group.position, ...[...peers.values()].map(peer => peer.group.position)]);
       world.mirror.visible = floor === 1;
+      if (seat?.kind === 'slot') updateSlotHover(); else setSlotHover(null);
       world.liveSlots.forEach(machine => machine.frame(now));
       localWorldSeconds = worldClock ? worldClock() : localWorldSeconds + dt;
       world.cars.forEach((c, i) => {
@@ -331,6 +371,8 @@ export default function createScene(host, events) {
       world.liveSlots.forEach(m => m.update(machines.find(state => state.id === m.id) || null, serverNow));
     },
     setSlotCommand(callback) { slotCommand = callback; },
+    setSlotAction(callback) { slotAction = callback; },
+    updateSlotControlState(machineId, value) { world.liveSlots.find(machine => machine.id === machineId)?.updateControls(value); },
     requestSlot(action, payload) {
       return slotCommand ? slotCommand(action, payload) : Promise.reject(new Error('Lobby host is not connected.'));
     },

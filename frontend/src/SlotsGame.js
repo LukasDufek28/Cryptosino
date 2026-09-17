@@ -45,7 +45,7 @@ const PAYLINES_CLIENT = {
   ],
 };
 
-const NUM_REELS    = { joker: 5, golden: 5 };
+const NUM_REELS    = { joker: 4, golden: 5 };
 const CELL_H       = 72;    // px – one symbol cell height
 const LOOP_ROWS    = 22;    // random rows above the result in the strip
 const SPIN_PX      = 20;    // px moved per animation frame (~1200 px/s @60fps)
@@ -388,7 +388,7 @@ export default function SlotsGame({ balance, setBalance, token }) {
           </div>
           <div className="slots-subtitle">
             {variant === 'joker'
-              ? '3 Reels · 5 Paylines · Joker Wild · Free Respin'
+              ? '4 Reels · 81 Ways · Joker Wild · Sticky Respins'
               : '5 Reels · 10 Paylines · Book Wild & Scatter'}
           </div>
         </div>
@@ -411,7 +411,7 @@ export default function SlotsGame({ balance, setBalance, token }) {
       {/* ── Machine ─────────────────────────────────────────────────────── */}
       <div className="slots-machine">
         <div className="slots-line-badge">
-          {variant === 'joker' ? '5 PAYLINES' : '10 PAYLINES'}
+          {variant === 'joker' ? '81 WAYS' : '10 PAYLINES'}
         </div>
 
         <div className={`slots-reels-wrap num-${numReels}`}>
@@ -454,8 +454,7 @@ export default function SlotsGame({ balance, setBalance, token }) {
             </div>
           </div>
           <div className="slots-bet-info">
-            <span>Lines: {variant === 'joker' ? 5 : 10}</span>
-            <span>Per line: ${(Number(bet) / (variant === 'joker' ? 5 : 10)).toFixed(2)}</span>
+            <span>{variant === 'joker' ? 'Ways: 81' : 'Lines: 10'}</span><span>{variant === 'joker' ? 'Bet is distributed across 81 ways' : 'Bet is split over 10 lines'}</span>
           </div>
         </div>
 
@@ -495,7 +494,7 @@ export default function SlotsGame({ balance, setBalance, token }) {
             })}
             {variant === 'joker' && (
               <p className="slots-pt-note">
-                🃏 JOKER substitutes for every fruit across all 243 ways.<br />
+                🃏 JOKER substitutes for every fruit across all 81 ways.<br />
                 A win containing a new Joker sticks its full combination and grants another <b>free respin</b>. All round awards are added together.<br />
                 Server-authoritative custom implementation; not provider-certified math.
               </p>

@@ -8,7 +8,6 @@ import useLeaderboard from './useLeaderboard';
 import useTradingMarket from './useTradingMarket';
 import TradingDesk from './TradingDesk';
 import useSlotMachines from './useSlotMachines';
-import SlotControls from './SlotControls';
 import layout from './worldLayout.json';
 import casinoVersion from './version.json';
 import './CasinoWorld.css';
@@ -123,7 +122,7 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
   const presence = usePresence(token, sceneRef, ready);
   useLeaderboard(sceneRef, ready);
   const tradingMarket = useTradingMarket(sceneRef, ready);
-  const slots = useSlotMachines(sceneRef, ready, token, setBalance);
+  const slots = useSlotMachines(sceneRef, ready, token, setBalance, balance);
   openSlotRef.current = id => { if (!token) { setActiveGame(null); setPanel('auth'); } else slots.claim(id); };
   // Signing out also closes any retained authenticated game screen.
   useEffect(() => { if (!token) setPanel(current => ['game', 'trading'].includes(current) ? null : current); }, [token]);
@@ -181,7 +180,6 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
     </footer>
     {showMap && !panel && <MiniMap status={status} />}
     {presence.message && <div className="amber-presence-note" role="status">{presence.message}</div>}
-    {!welcome && !panel && <SlotControls slots={slots} />}
     {receptionMessage && <div className="amber-reception-note" role="status">{receptionMessage}<button aria-label="Dismiss receptionist message" onClick={() => setReceptionMessage('')}>×</button></div>}
     {chatOpen && <form className="amber-chat-compose" onSubmit={event => {
       event.preventDefault(); sceneRef.current?.chat(chatText); setChatOpen(false); setChatText('');

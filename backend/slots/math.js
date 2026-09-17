@@ -55,14 +55,15 @@ function evaluatePaylines(config, visible, totalBet) {
 function evaluateJokerWays(config, visible, totalBet) {
   const symbols = Object.keys(config.paytable).filter(symbol => symbol !== config.wild);
   const grouped = new Map();
-  for (let pathNumber = 0; pathNumber < 243; pathNumber++) {
+  const reelCount = config.reels.length, pathCount = config.ways || (3 ** reelCount);
+  for (let pathNumber = 0; pathNumber < pathCount; pathNumber++) {
     let cursor = pathNumber;
     const rows = [];
-    for (let reel = 0; reel < 5; reel++) { rows.push(cursor % 3); cursor = Math.floor(cursor / 3); }
+    for (let reel = 0; reel < reelCount; reel++) { rows.push(cursor % 3); cursor = Math.floor(cursor / 3); }
     let best = { mult: 0 };
     for (const symbol of symbols) {
       let count = 0;
-      while (count < 5 && (visible[count][rows[count]] === symbol || visible[count][rows[count]] === config.wild)) count++;
+      while (count < reelCount && (visible[count][rows[count]] === symbol || visible[count][rows[count]] === config.wild)) count++;
       const mult = config.paytable[symbol][count] || 0;
       if (mult > best.mult) best = { symbol, count, mult };
     }
@@ -122,7 +123,7 @@ function spinJokerRound({ config, wager, serverSeed, seed, nonce }) {
       }
     }
     rounds.push({ visible: visible.map(reel => [...reel]), wins: evaluation.wins, heldCells, lockedCells: sortedCells(locked), newlyLocked });
-    if (!newJokers.length || locked.size === 15) break;
+    if (!newJokers.length || locked.size === config.reels.length * config.rows) break;
     const newStops = config.reels.map((strip, reel) => slotsSpinReel(strip, reel, serverSeed, seed, nonce, (roundIndex + 1) * 1000));
     const nextVisible = getSlotsVisible(config, newStops);
     for (const key of locked) {
@@ -133,7 +134,7 @@ function spinJokerRound({ config, wager, serverSeed, seed, nonce }) {
     visible = nextVisible;
   }
   const respinInfo = rounds.length > 1 ? { triggered: true, count: rounds.length - 1,
-    lockedCells: rounds.at(-1).lockedCells, lockedReels: [], respunReels: [0, 1, 2, 3, 4] } : null;
+    lockedCells: rounds.at(-1).lockedCells, lockedReels: [], respunReels: config.reels.map((_, i) => i) } : null;
   return { stops, visible, wins: allWins, totalPayout: Number(totalPayout.toFixed(2)), respinInfo, initialVisible, rounds };
 }
 

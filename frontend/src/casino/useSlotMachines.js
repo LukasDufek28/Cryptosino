@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import layout from './worldLayout.json';
 
 const API = process.env.REACT_APP_API_URL || '';
+const BET_STEPS = [0.1,0.2,0.5,1,2,5,10,20,50,100,200,500,1000];
+function stepBet(value, direction) { const n=Number(value)||0.1; const i=direction>0?BET_STEPS.findIndex(v=>v>n):[...BET_STEPS].reverse().findIndex(v=>v<n); if(direction>0) return String(BET_STEPS[i<0?BET_STEPS.length-1:i]); const idx=i<0?0:BET_STEPS.length-1-i; return String(BET_STEPS[idx]); }
 
 // The lobby host owns seats and shared reel presentation. The API remains the
 // only authority for wagers, RNG and balances.
-export default function useSlotMachines(sceneRef, ready, token, setBalance) {
+export default function useSlotMachines(sceneRef, ready, token, setBalance, balance) {
   const actions = useRef({});
   const [selected, setSelected] = useState(null);
   const [message, setMessage] = useState('');
@@ -13,8 +15,8 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance) {
   const [retry, setRetry] = useState(false);
   const [autoSpin, setAutoSpin] = useState(false);
   const [bet, setBet] = useState('10');
-  const betRef = useRef(bet);
-  betRef.current = bet;
+  const betRef = useRef(bet), balanceRef = useRef(balance);
+  betRef.current = bet; balanceRef.current = balance;
   useEffect(() => {
     if (!ready) return undefined;
     const scene = sceneRef.current;
@@ -39,6 +41,10 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance) {
       scene.updateSlots(machines, state.serverNow);
     };
     scene.setSlotStateReceiver(receiveState);
+    scene.setSlotAction(action => {
+      if (action === 'spin') actions.current.spin?.(betRef.current);
+      else actions.current[action]?.();
+    });
     void scene.requestSlot('sync').catch(() => {});
     const release = () => {
       const id = active; active = null;
@@ -62,7 +68,15 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance) {
       }, 650);
     };
     actions.current = {
+      betDown() { if (!sending && !pending && active) setBet(value => stepBet(value, -1)); },
+      betUp() { if (!sending && !pending && active) setBet(value => stepBet(value, 1)); },
+      maxBet() {
+        if (sending || pending || !active) return;
+        const affordable = BET_STEPS.filter(value => value <= Number(balanceRef.current || 0));
+        setBet(String(affordable.at(-1) || 0.1));
+      },
       async claim(id) {
+
         if (claiming || sending || pending || stopped || !token) return;
         if (active === id) return;
         if (active) { setMessage('Stand up before changing machines.'); return; }
@@ -133,11 +147,17 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance) {
     window.addEventListener('pagehide', release);
     return () => {
       stopped = true; clearInterval(tick); if (messageTimer) clearTimeout(messageTimer); if (autoTimer) clearTimeout(autoTimer);
-      controllers.forEach(controller => controller.abort()); scene.setSlotStateReceiver(null);
+      controllers.forEach(controller => controller.abort()); scene.setSlotStateReceiver(null); scene.setSlotAction(null);
       window.removeEventListener('pagehide', release); scene.stand(); release(); actions.current = {};
       setSelected(null); setMessage(''); setRetry(false); setBusy(false);
     };
   }, [ready, sceneRef, token, setBalance]);
+  useEffect(() => {
+    if (!ready || !selected) return;
+    sceneRef.current?.updateSlotControlState(selected.id, {
+      bet: Number(bet) || 0.1, autoSpin, busy, retry, balance: Number(balance), message
+    });
+  }, [ready, sceneRef, selected, bet, autoSpin, busy, retry, balance, message]);
   return { selected, message, busy, retry, autoSpin, bet, setBet,
     claim: id => actions.current.claim?.(id), spin: () => actions.current.spin?.(bet),
     toggleAuto: () => actions.current.toggleAuto?.(), stand: () => actions.current.stand?.(), dismiss: () => actions.current.dismiss?.() };
