@@ -81,8 +81,43 @@ export function slotLock() {
 
 export function slotRespin() {
   ensure();
-  [440, 554.37, 659.25, 880].forEach((f, i) => tone(f, .16, .04, 'sine', i * .055));
-  noise(.12, .018, 1800);
+  tone(130,2.15,.024,'triangle');
+  const melody=[392,523.25,659.25,523.25,783.99,659.25,880,783.99,1046.5,880,1174.66,1046.5,1318.5,1174.66,1568,1318.5];
+  melody.forEach((f,i)=>{
+    const delay=i*.13;
+    tone(f,.20,.024+(i%4===3?.008:0),'triangle',delay);
+    if(i%2===0)tone(f*2,.12,.007,'sine',delay+.025);
+  });
+  [196,261.63,329.63,392].forEach((f,i)=>tone(f,1.7,.0065,'sine',.18+i*.035));
+  [523.25,659.25,783.99].forEach((f,i)=>tone(f,.44,.018,'triangle',1.55+i*.13));
+  noise(.22,.016,1700);
+}
+
+export function slotCelebration(multiplier = 1, maxWin = false) {
+  ensure();
+  const tier = maxWin ? 4 : multiplier >= 50 ? 3 : multiplier >= 25 ? 2 : multiplier >= 10 ? 1 : multiplier >= 3 ? 0.5 : 0;
+  const roots=[261.63,329.63,392,523.25,659.25,783.99];
+  const phrase=(offset,lift=1)=>{
+    roots.forEach((f,i)=>{
+      tone(f*lift,.30+tier*.045,.027+tier*.006,'triangle',offset+i*.095);
+      tone(f*2*lift,.17,.010+tier*.002,'sine',offset+i*.095+.028);
+    });
+  };
+  phrase(0,1);
+  if(tier>=1) phrase(.72,1.04);
+  if(tier>=2) phrase(1.48,1.08);
+  if(tier>=3) phrase(2.25,1.12);
+  if(tier>=2)[1046.5,1318.5,1568].forEach((f,i)=>tone(f,.48,.022+tier*.005,'sine',.55+i*.13));
+  if(tier>=3){
+    tone(196,2.6,.022,'sawtooth',.10);
+    [130.81,164.81,196].forEach((f,i)=>tone(f,2.1,.012,'triangle',.2+i*.04));
+    noise(.55,.024,1350);
+  }
+  if(maxWin){
+    phrase(3.05,1.18);
+    [523.25,659.25,783.99,1046.5,1318.5,1568,2093].forEach((f,i)=>tone(f,.50,.045,'triangle',3.72+i*.11));
+    noise(.85,.035,1150);
+  }
 }
 
 function ambiencePhrase() {
@@ -104,4 +139,38 @@ export function startSlotAmbience() {
 export function stopSlotAmbience() {
   ambienceOn = false;
   if (ambienceTimer) { window.clearInterval(ambienceTimer); ambienceTimer = null; }
+}
+
+export function olympusTumble(level = 0) {
+  ensure();
+  const root = 180 + Math.min(7, level) * 18;
+  tone(root, .11, .032, 'triangle');
+  tone(root * 1.5, .14, .022, 'sine', .045);
+  noise(.08, .012, 1200);
+}
+
+export function olympusMultiplier(value = 2) {
+  ensure();
+  const tier = value >= 100 ? 3 : value >= 25 ? 2 : value >= 10 ? 1 : 0;
+  [330, 440, 660].forEach((f, i) => tone(f * (1 + tier * .08), .18 + tier*.04, .03 + tier*.006, 'sine', i * .06));
+  if (tier >= 2) tone(990, .32, .032, 'triangle', .18);
+}
+
+export function olympusScatter(count = 1) {
+  ensure();
+  tone(260 + count * 45, .22, .04, 'triangle');
+  tone(520 + count * 60, .18, .024, 'sine', .08);
+}
+
+export function olympusThunder(intensity = 1) {
+  ensure();
+  noise(.28 + intensity * .08, .025 + intensity * .012, 160);
+  tone(72, .3, .05, 'sawtooth');
+  tone(108, .24, .025, 'triangle', .04);
+}
+
+export function olympusFreeSpinStart() {
+  ensure();
+  [261.63,329.63,392,523.25,659.25].forEach((f,i)=>tone(f,.28,.035,'triangle',i*.08));
+  noise(.25,.018,1800);
 }

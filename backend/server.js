@@ -753,6 +753,114 @@ app.post('/api/blackjack/stand', authMiddleware, async (req, res) => {
   } catch (outer) { res.status(500).json({ error: outer.message }); }
 });
 
+// Double down: deduct one additional original wager, draw one player card, then resolve dealer.
+app.post('/api/blackjack/double', authMiddleware, async (req, res) => {
+  const { betId } = req.body;
+  if (!betId) return res.status(400).json({ error: 'Missing betId' });
+  try {
+    const client = await require('./db').getClient();
+    try {
+      await client.query('BEGIN');
+      const betRow = await client.query(
+        'SELECT * FROM bets WHERE id=$1 AND user_id=$2 FOR UPDATE',
+        [betId, req.user.id]
+      );
+      if (!betRow.rows.length) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Bet not found' });
+      }
+      const bet = betRow.rows[0], r = bet.result;
+      if (bet.game !== 'blackjack' || !r || r.phase !== 'playing') {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Hand cannot be doubled' });
+      }
+      if (!Array.isArray(r.playerHand) || r.playerHand.length !== 2) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Double down is only available on the first two cards' });
+      }
+      const originalWager = Number(bet.wager);
+      const totalWager = Number((originalWager * 2).toFixed(2));
+      const userRow = await client.query(
+        'SELECT balance FROM users WHERE id=$1 FOR UPDATE',
+        [req.user.id]
+      );
+      if (!userRow.rows.length || Number(userRow.rows[0].balance) < originalWager) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Insufficient balance to double' });
+      }
+      await client.query(
+        'UPDATE users SET balance=balance-$2 WHERE id=$1',
+        [req.user.id, originalWager]
+      );
+      if (!r.deck) {
+        const fresh = getDeck();
+        const used = [...r.playerHand, ...r.fullDealer];
+        for (const u of used) {
+          const idx = fresh.findIndex(card => card.value === u.value && card.suit === u.suit);
+          if (idx >= 0) fresh.splice(idx, 1);
+        }
+        r.deck = fresh;
+      }
+      r.playerHand.push(r.deck.pop());
+      r.wager = totalWager;
+      const playerValue = calculateHandValue(r.playerHand);
+      const dealerHand = r.fullDealer;
+      let outcome = 'bust', payout = 0;
+      if (playerValue <= 21) {
+        while (calculateHandValue(dealerHand) < 17) dealerHand.push(r.deck.pop());
+        const dealerValue = calculateHandValue(dealerHand);
+        if (dealerValue > 21 || playerValue > dealerValue) {
+          outcome = 'win';
+          payout = totalWager * 2;
+        } else if (playerValue === dealerValue) {
+          outcome = 'push';
+          payout = totalWager;
+        } else {
+          outcome = 'lose';
+        }
+      }
+      payout = Number(payout.toFixed(2));
+      if (payout > 0) {
+        await client.query(
+          'UPDATE users SET balance=balance+$2, peak_balance=GREATEST(peak_balance,balance+$2) WHERE id=$1',
+          [req.user.id, payout]
+        );
+      }
+      r.phase = 'finished';
+      r.outcome = outcome;
+      r.dealerHandFinal = dealerHand;
+      await client.query(
+        'UPDATE bets SET wager=$2,payout=$3,result=$4 WHERE id=$1',
+        [betId, totalWager, payout, JSON.stringify(r)]
+      );
+      const balanceRow = await client.query(
+        'SELECT balance FROM users WHERE id=$1',
+        [req.user.id]
+      );
+      await client.query('COMMIT');
+      res.json({
+        ok: true,
+        wager: totalWager.toFixed(2),
+        playerHand: r.playerHand,
+        playerValue,
+        dealerHand,
+        dealerValue: calculateHandValue(dealerHand),
+        outcome,
+        payout: payout.toFixed(2),
+        newBalance: Number(balanceRow.rows[0].balance).toFixed(2)
+      });
+    } catch (e) {
+      try { await client.query('ROLLBACK'); } catch {}
+      res.status(500).json({ error: e.message });
+    } finally {
+      client.release();
+    }
+  } catch (outer) {
+    res.status(500).json({ error: outer.message });
+  }
+});
+
+
 // Development-only route inspector (do NOT enable in production without auth)
 if (process.env.NODE_ENV !== 'production') {
   app.get('/api/_routes', (req, res) => {
@@ -786,7 +894,7 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // ===================== SLOTS =====================
-// Two variants: 'joker' (4×3, 81 ways + chained sticky respins) and 'golden' (5×3, book scatter)
+// Slot variants: Joker (4×3 sticky respins), Golden (5×3 paylines), Olympus (6×5 tumble/pay-anywhere).
 
 const { SLOTS_CONFIG, spinRound } = require('./slots/math');
 const slotMachines = require('./slots/machines');
@@ -827,7 +935,8 @@ app.post('/api/slots/spin', authMiddleware, async (req, res) => {
         return res.status(400).json({ error: 'Insufficient balance' });
       }
 
-      const { stops, visible, wins, totalPayout, respinInfo, initialVisible, rounds } = spinRound({ variant, wager, serverSeed, seed, nonce });
+      const outcome = spinRound({ variant, wager, serverSeed, seed, nonce });
+      const { stops, visible, wins, totalPayout, respinInfo, initialVisible, rounds, olympus } = outcome;
 
       const payout = Number(totalPayout.toFixed(2));
       const newBalance = Number((Number(user.balance) - wager + payout).toFixed(2));
@@ -841,9 +950,9 @@ app.post('/api/slots/spin', authMiddleware, async (req, res) => {
         [user.id, `slots_${variant}`, wager, payout, JSON.stringify({ stops, winCount: wins.length, totalPayout: payout, mathVersion: config.mathVersion, requestId, machineId })]
       );
       const startedAt = Date.now();
-      const durationMs = variant === 'joker' ? Math.max(2850, (rounds?.length || 1) * 2850) : 3600;
+      const durationMs = Number(outcome.durationMs) || (variant === 'joker' ? Math.max(2850, (rounds?.length || 1) * 2850) : 3600);
       const publicSpin = { id: requestId, machineId: machineId || null, userId: req.user.id, username: req.user.username,
-        variant, startedAt, durationMs, visible, initialVisible, rounds, respin: respinInfo, wins, bet: wager,
+        variant, startedAt, durationMs, visible, initialVisible, rounds, respin: respinInfo, olympus, wins, bet: wager,
         balanceBefore: Number(user.balance), totalPayout: payout, mathVersion: config.mathVersion };
       const response = {
         ok: true, stops, visible, wins, initialVisible, rounds, mathVersion: config.mathVersion, spin: publicSpin,

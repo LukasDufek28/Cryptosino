@@ -96,6 +96,16 @@
       "exitZ": -6.15
     },
     {
+      "id": "seat-blackjack-live",
+      "name": "The twenty-one club",
+      "kind": "blackjack",
+      "x": -0.4,
+      "z": -3.78,
+      "yaw": 0,
+      "exitX": 2.25,
+      "exitZ": -3.0
+    },
+    {
       "id": "window-left",
       "name": "Window lounge",
       "x": -5.5,

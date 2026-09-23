@@ -19,6 +19,42 @@ const cleanSlotSpin = (spin, member, machine) => {
       !Array.isArray(spin.visible) || spin.visible.length !== cols || spin.visible.some(reel => !Array.isArray(reel) || reel.length !== rows)) return null;
   return spin;
 };
+const BLACKJACK_SEAT = 'seat-blackjack-live';
+const cleanBlackjackCard = card => {
+  if (!card || typeof card !== 'object') return null;
+  const value = String(card.value || ''), suit = String(card.suit || '');
+  if (value === '?' && suit === '?') return { value, suit };
+  if (!['A','2','3','4','5','6','7','8','9','10','J','Q','K'].includes(value) || !['♠','♥','♦','♣'].includes(suit)) return null;
+  return { value, suit };
+};
+const cleanBlackjackVisual = raw => {
+  if (!raw || typeof raw !== 'object' || !['betting','playing','finished'].includes(raw.phase)) return null;
+  const playerHand = Array.isArray(raw.playerHand) && raw.playerHand.length <= 12 ? raw.playerHand.map(cleanBlackjackCard) : null;
+  const dealerHand = Array.isArray(raw.dealerHand) && raw.dealerHand.length <= 12 ? raw.dealerHand.map(cleanBlackjackCard) : null;
+  if (!playerHand || !dealerHand || playerHand.some(v => !v) || dealerHand.some(v => !v)) return null;
+  const bet = Number(raw.bet || 0), wager = Number(raw.wager || 0), payout = Number(raw.payout || 0), profit = Number(raw.profit || 0);
+  if (![bet, wager, payout, profit].every(Number.isFinite) || bet < 0 || wager < 0 || payout < 0 || profit < 0 ||
+      bet > 1000000 || wager > 2000000 || payout > 10000000 || profit > 10000000) return null;
+  const playerValue = raw.playerValue == null ? null : Number(raw.playerValue), dealerValue = raw.dealerValue == null ? null : Number(raw.dealerValue);
+  if ((playerValue != null && (!Number.isFinite(playerValue) || playerValue < 0 || playerValue > 100)) ||
+      (dealerValue != null && (!Number.isFinite(dealerValue) || dealerValue < 0 || dealerValue > 100))) return null;
+  const outcome = raw.outcome == null ? null : String(raw.outcome);
+  if (outcome && !['blackjack','win','push','lose','bust'].includes(outcome)) return null;
+  let dealerCue = null;
+  if (raw.dealerCue && typeof raw.dealerCue === 'object') {
+    const cueId = Number(raw.dealerCue.id), cueType = String(raw.dealerCue.type || 'count');
+    const cueLine = typeof raw.dealerCue.line === 'string' ? raw.dealerCue.line.trim().slice(0, 100) : '';
+    const delayMs = Math.max(0, Math.min(5000, Number(raw.dealerCue.delayMs) || 0));
+    if (Number.isSafeInteger(cueId) && cueId >= 0 && cueLine &&
+        ['shuffle','deal','hit','stand','double','count','win','blackjack','lose','bust','push'].includes(cueType)) {
+      dealerCue = { id: cueId, type: cueType, line: cueLine, delayMs };
+    }
+  }
+  return { phase: raw.phase, bet, wager, playerHand, dealerHand, dealerHidden: Boolean(raw.dealerHidden),
+    outcome, message: typeof raw.message === 'string' ? raw.message.slice(0, 120) : '', busy: Boolean(raw.busy),
+    roundId: typeof raw.roundId === 'string' ? raw.roundId.slice(0, 100) : null, playerValue, dealerValue, dealerCue, payout, profit,
+    canDouble: Boolean(raw.canDouble), active: Boolean(raw.active) };
+};
 
 // Cosmetic world state only. Never accept wallet, bet or payout messages here.
 function cleanPose(p) {
@@ -40,6 +76,7 @@ export default function browserRoom(token, scene, onStatus) {
   const sessionId = window.crypto.randomUUID();
   const links = new Map(), states = new Map();
   const slotMachines = new Map(), slotRequests = new Map();
+  let blackjackVisual = null;
   let roster = new Map(), host = null, generation = 0, selfId = null;
   let stopped = false, timer, controller, inSync = false;
   let outbox = [], ack = '0', lastSync = 0, packetSeq = 0, snapshotSeq = -1;
@@ -90,6 +127,31 @@ export default function browserRoom(token, scene, onStatus) {
   function slotState() {
     return { machines: layout.slotMachines.map(machine => slotMachines.get(machine.id) || { id: machine.id }),
       serverNow: Date.now() + slotServerOffset };
+  }
+  function applyBlackjackVisual(value) {
+    const clean = cleanBlackjackVisual(value?.state);
+    if (!clean) return;
+    blackjackVisual = { sessionId: typeof value.sessionId === 'string' ? value.sessionId : null, state: clean, serverNow: Number(value.serverNow) || Date.now() };
+    scene.updateBlackjack?.(clean, blackjackVisual.serverNow);
+  }
+  function publishBlackjackVisual(target = null) {
+    if (!isHost() || !blackjackVisual) return;
+    const packet = { type: 'blackjackState', generation, ...blackjackVisual };
+    scene.updateBlackjack?.(blackjackVisual.state, blackjackVisual.serverNow);
+    if (target) send(links.get(target)?.events, packet);
+    else for (const link of links.values()) send(link.events, packet);
+  }
+  function sendBlackjackVisual(raw) {
+    if (!active()) return;
+    const clean = cleanBlackjackVisual(raw);
+    if (!clean) return;
+    if (isHost()) {
+      if (states.get(sessionId)?.pose?.seatId !== BLACKJACK_SEAT) return;
+      blackjackVisual = { sessionId, state: clean, serverNow: Date.now() };
+      publishBlackjackVisual();
+    } else {
+      send(links.get(host)?.events, { type: 'blackjackVisual', generation, state: clean });
+    }
   }
   function applySlotState(value) {
     if (!value || !Array.isArray(value.machines) || value.machines.length > layout.slotMachines.length || !Number.isFinite(value.serverNow)) return;
@@ -209,6 +271,14 @@ export default function browserRoom(token, scene, onStatus) {
       send(link.events, { type: 'slotReply', generation, requestId: packet.requestId, ...result });
       return;
     }
+    if (isHost() && packet.type === 'blackjackVisual') {
+      if (states.get(link.id)?.pose?.seatId !== BLACKJACK_SEAT) return;
+      const clean = cleanBlackjackVisual(packet.state);
+      if (!clean) return;
+      blackjackVisual = { sessionId: link.id, state: clean, serverNow: Date.now() };
+      publishBlackjackVisual();
+      return;
+    }
     if (isHost()) {
       if (packet.type === 'chat') {
         const text = cleanChat(packet.text);
@@ -224,6 +294,7 @@ export default function browserRoom(token, scene, onStatus) {
     }
     if (link.id !== host) return;
     if (packet.type === 'slotState') { applySlotState(packet); return; }
+    if (packet.type === 'blackjackState') { applyBlackjackVisual(packet); return; }
     if (packet.type === 'slotReply') {
       const pending = slotRequests.get(packet.requestId);
       if (!pending) return;
@@ -263,7 +334,7 @@ export default function browserRoom(token, scene, onStatus) {
     if (!['movement', 'events'].includes(channel.label) || link[channel.label]) { channel.close(); return; }
     link[channel.label] = channel;
     channel.onmessage = e => receive(link, e.data);
-    channel.onopen = () => { lastEventRevision = -1; if (isHost() && channel.label === 'events') publishSlotState(link.id); };
+    channel.onopen = () => { lastEventRevision = -1; if (isHost() && channel.label === 'events') { publishSlotState(link.id); publishBlackjackVisual(link.id); } };
   }
   function newLink(id, connection) {
     closeLink(id);
@@ -414,6 +485,7 @@ export default function browserRoom(token, scene, onStatus) {
   }
   const tickTimer = setInterval(tick, TICK_MS);
   scene.setSlotCommand(requestSlot);
+  scene.setBlackjackPublisher?.(sendBlackjackVisual);
   scene.setChatSender(sendChat);
   document.addEventListener('visibilitychange', visibility);
   window.addEventListener('pagehide', leave);
@@ -422,6 +494,6 @@ export default function browserRoom(token, scene, onStatus) {
     stopped = true; clearTimeout(timer); clearInterval(tickTimer); controller?.abort();
     document.removeEventListener('visibilitychange', visibility); window.removeEventListener('pagehide', leave);
     for (const pending of slotRequests.values()) { clearTimeout(pending.timeout); pending.reject(new Error('Lobby closed.')); }
-    slotRequests.clear(); scene.setChatSender(null); scene.setSlotCommand(null); disconnect(); void leave();
+    slotRequests.clear(); scene.setChatSender(null); scene.setSlotCommand(null); scene.setBlackjackPublisher?.(null); disconnect(); void leave();
   };
 }

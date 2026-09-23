@@ -17,10 +17,23 @@ function multOrb(c,x,y,s,value){c.save();c.translate(x,y);const hue=value>=100?'
 function drawRaw(c,symbol,x,y,size,value){const s=size;switch(symbol){case'BLUE':jewel(c,'#28a8ff',x,y,s*.46,4);break;case'GREEN':jewel(c,'#41d87d',x,y,s*.46,3);break;case'YELLOW':jewel(c,'#ffc92f',x,y,s*.46,6);break;case'PURPLE':jewel(c,'#b65bff',x,y,s*.46,4);break;case'RED':jewel(c,'#f24f4f',x,y,s*.46,5);break;case'CROWN':crown(c,x,y,s);break;case'RING':ring(c,x,y,s);break;case'CHALICE':chalice(c,x,y,s);break;case'HOURGLASS':hourglass(c,x,y,s);break;case'SCATTER':scatter(c,x,y,s);break;case'MULT':multOrb(c,x,y,s,value||2);break;default:jewel(c,'#b0c7d8',x,y,s*.42,6);}}
 function cacheKey(symbol,value,size){return `${symbol}:${value||0}:${Math.round(size)}`;}
 export function drawOlympusSymbol(c,symbol,x,y,size,{value=0,alpha=1,scale=1,glow=false}={}){const key=cacheKey(symbol,value,size);let img=CACHE.get(key);if(!img){const w=Math.ceil(size*2.2),canvas=document.createElement('canvas');canvas.width=w;canvas.height=w;const cc=canvas.getContext('2d');drawRaw(cc,symbol,w/2,w/2,size,value);img=canvas;CACHE.set(key,img);}c.save();c.globalAlpha=alpha;if(glow){c.shadowColor='#ffe36e';c.shadowBlur=size*.28;}const d=img.width*scale;c.drawImage(img,x-d/2,y-d/2,d,d);c.restore();}
-export function drawOlympusKing(c,x,y,s,{charge=0}={}){c.save();c.translate(x,y);const glow=.2+.8*charge;c.shadowColor='#7fd8ff';c.shadowBlur=s*.2*glow;c.fillStyle='#f0c49e';c.beginPath();c.arc(0,-s*.48,s*.15,0,TAU);c.fill();c.shadowBlur=0;
-  c.fillStyle='#f4f1ea';c.beginPath();c.arc(-s*.12,-s*.54,s*.09,0,TAU);c.arc(0,-s*.61,s*.11,0,TAU);c.arc(s*.12,-s*.54,s*.09,0,TAU);c.fill();c.beginPath();c.moveTo(-s*.17,-s*.44);c.quadraticCurveTo(0,-s*.18,s*.18,-s*.44);c.lineTo(s*.1,-s*.22);c.lineTo(0,-s*.14);c.lineTo(-s*.1,-s*.22);c.closePath();c.fill();
-  c.fillStyle='#d6a33a';c.beginPath();c.moveTo(-s*.34,-s*.25);c.lineTo(-s*.16,-s*.42);c.lineTo(0,-s*.34);c.lineTo(s*.16,-s*.42);c.lineTo(s*.34,-s*.25);c.lineTo(s*.2,-s*.1);c.lineTo(-s*.2,-s*.1);c.closePath();c.fill();
-  c.fillStyle='#fff';c.beginPath();c.moveTo(-s*.28,-s*.08);c.lineTo(s*.18,-s*.08);c.lineTo(s*.34,s*.56);c.lineTo(-s*.18,s*.62);c.closePath();c.fill();
-  c.fillStyle='#d9a438';c.fillRect(-s*.25,s*.34,s*.5,s*.12);c.fillStyle='#42a9ff';c.beginPath();c.arc(0,s*.40,s*.06,0,TAU);c.fill();
-  c.strokeStyle='#f0c49e';c.lineWidth=s*.12;c.lineCap='round';c.beginPath();c.moveTo(-s*.24,-s*.05);c.lineTo(-s*.43,s*.28);c.moveTo(s*.21,-s*.04);c.lineTo(s*.38,s*.22);c.stroke();
-  c.strokeStyle='#f7dc76';c.lineWidth=s*.045;c.shadowColor='#65d4ff';c.shadowBlur=s*.16*(.3+charge);c.beginPath();c.moveTo(s*.39,s*.12);c.lineTo(s*.54,-s*.02);c.lineTo(s*.46,s*.10);c.lineTo(s*.6,s*.08);c.lineTo(s*.43,s*.28);c.stroke();c.restore();}
+export function drawOlympusKing(c,x,y,s,{charge=0}={}){
+  c.save();c.translate(x,y);const glow=.2+.8*charge;
+  c.shadowColor='#65d8ff';c.shadowBlur=s*.16*glow;c.fillStyle='rgba(113,203,255,.18)';c.beginPath();c.arc(0,0,s*.62,0,TAU);c.fill();c.shadowBlur=0;
+  const skin=c.createLinearGradient(-s*.15,-s*.6,s*.2,-s*.2);skin.addColorStop(0,'#ffe0bf');skin.addColorStop(.55,'#e8b38a');skin.addColorStop(1,'#b97758');
+  c.fillStyle=skin;c.beginPath();c.ellipse(0,-s*.45,s*.145,s*.19,0,0,TAU);c.fill();
+  c.fillStyle='#f5f1e8';[-.13,-.065,0,.07,.14].forEach((dx,i)=>{c.beginPath();c.arc(dx*s,-s*(.58+(i%2)*.035),s*.085,0,TAU);c.fill();});
+  c.beginPath();c.moveTo(-s*.15,-s*.4);c.quadraticCurveTo(-s*.09,-s*.18,0,-s*.13);c.quadraticCurveTo(s*.12,-s*.2,s*.16,-s*.41);c.quadraticCurveTo(s*.07,-s*.28,0,-s*.24);c.quadraticCurveTo(-s*.08,-s*.28,-s*.15,-s*.4);c.fill();
+  c.strokeStyle='#6c4438';c.lineWidth=s*.018;c.lineCap='round';c.beginPath();c.moveTo(-s*.105,-s*.49);c.lineTo(-s*.035,-s*.505);c.moveTo(s*.035,-s*.505);c.lineTo(s*.105,-s*.49);c.stroke();
+  c.fillStyle='#5bd8ff';[-.064,.064].forEach(dx=>{c.beginPath();c.arc(dx*s,-s*.47,s*.014,0,TAU);c.fill();});
+  c.strokeStyle='#8a5845';c.lineWidth=s*.012;c.beginPath();c.moveTo(0,-s*.46);c.lineTo(-s*.018,-s*.405);c.lineTo(s*.02,-s*.4);c.stroke();
+  const gold=c.createLinearGradient(-s*.35,-s*.3,s*.34,s*.1);gold.addColorStop(0,'#8e5010');gold.addColorStop(.32,'#ffe07b');gold.addColorStop(.58,'#d99c24');gold.addColorStop(1,'#714009');
+  c.fillStyle=gold;c.beginPath();c.moveTo(-s*.39,-s*.25);c.lineTo(-s*.18,-s*.36);c.lineTo(0,-s*.27);c.lineTo(s*.19,-s*.36);c.lineTo(s*.39,-s*.24);c.lineTo(s*.26,-s*.06);c.lineTo(-s*.27,-s*.06);c.closePath();c.fill();
+  c.fillStyle='#f5f2e9';c.beginPath();c.moveTo(-s*.29,-s*.08);c.quadraticCurveTo(-s*.24,s*.28,-s*.17,s*.63);c.lineTo(s*.31,s*.57);c.quadraticCurveTo(s*.23,s*.2,s*.17,-s*.08);c.closePath();c.fill();
+  c.strokeStyle='rgba(134,112,91,.34)';c.lineWidth=s*.014;for(let i=-2;i<=2;i++){c.beginPath();c.moveTo(i*s*.055,-s*.02);c.quadraticCurveTo(i*s*.07,s*.25,i*s*.085,s*.53);c.stroke();}
+  c.fillStyle=gold;c.fillRect(-s*.25,s*.31,s*.51,s*.11);c.fillStyle='#59bfff';c.beginPath();c.arc(0,s*.365,s*.052,0,TAU);c.fill();c.strokeStyle='#fff0a0';c.lineWidth=s*.015;c.stroke();
+  c.strokeStyle=skin;c.lineWidth=s*.105;c.lineCap='round';c.beginPath();c.moveTo(-s*.24,-s*.08);c.lineTo(-s*.43,s*.22);c.moveTo(s*.23,-s*.08);c.lineTo(s*.4,s*.19);c.stroke();
+  c.strokeStyle='#fff1a0';c.lineWidth=s*.045;c.lineJoin='round';c.shadowColor='#5bdcff';c.shadowBlur=s*(.08+.16*charge);c.beginPath();c.moveTo(s*.42,s*.07);c.lineTo(s*.58,-s*.09);c.lineTo(s*.50,s*.065);c.lineTo(s*.65,s*.02);c.lineTo(s*.47,s*.29);c.lineTo(s*.53,s*.13);c.lineTo(s*.39,s*.19);c.stroke();
+  c.strokeStyle='#71e1ff';c.lineWidth=s*.012;c.shadowBlur=s*.2*charge;for(let i=0;i<3;i++){c.beginPath();c.moveTo(s*(.43+i*.035),s*(.10-i*.04));c.lineTo(s*(.60+i*.02),-s*(.04+i*.03));c.stroke();}
+  c.restore();
+}

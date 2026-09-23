@@ -83,21 +83,23 @@ export function stool(parent, x, y, z) {
   cylinder(parent, 0.045, 0.055, 0.8, '#b09a6c', [x, y + 0.43, z]);
   cylinder(parent, 0.32, 0.37, 0.06, '#b09a6c', [x, y + 0.03, z]);
 }
-export function gameTable(parent, x, y, z, dice = false) {
+export function gameTable(parent, x, y, z, dice = false, liveBlackjack = false) {
   const g = group(parent, x, y, z);
   const rim = cylinder(g, 1, 1, 0.2, '#ad8651', [0, 1.04, 0], 12); rim.scale.set(2.1, 1, 1.22);
   const felt = cylinder(g, 1, 1, 0.025, '#315b48', [0, 1.15, 0], 12); felt.scale.set(1.98, 1, 1.11);
   [-1.3, 1.3].forEach(a => cylinder(g, 0.15, 0.27, 0.95, '#533e32', [a, 0.5, 0], 8));
   [-1.45, 0, 1.45].forEach(a => stool(g, a, 0, 1.7));
-  for (let i = 0; i < 4; i++) {
-    for (let j = 0; j < 3; j++) cylinder(g, 0.1, 0.1, 0.035, i % 2 ? '#e3bb76' : '#c77461', [-1.1 + i * 0.4, 1.19 + j * 0.04, -0.4], 10);
+  if (!liveBlackjack) {
+    for (let i = 0; i < 4; i++) {
+      for (let j = 0; j < 3; j++) cylinder(g, 0.1, 0.1, 0.035, i % 2 ? '#e3bb76' : '#c77461', [-1.1 + i * 0.4, 1.19 + j * 0.04, -0.4], 10);
+    }
   }
   if (dice) {
     [-0.35, 0.35].forEach((a, i) => {
       const die = box(g, [0.4, 0.4, 0.4], '#eee1c7', [a, 1.36, 0.1]); die.rotation.y = i * 0.7;
       cylinder(g, 0.045, 0.045, 0.012, '#674537', [a, 1.57, 0.1], 8);
     });
-  } else {
+  } else if (!liveBlackjack) {
     [-0.45, 0, 0.45].forEach(a => { const card = box(g, [0.28, 0.015, 0.42], '#efe5cd', [a, 1.175, 0.1]); card.rotation.y = a; });
   } return g;
 }
@@ -124,20 +126,28 @@ export function avatar(parent, username, color, faceSeed = 0) {
     box(knee, [0.2, 0.28, 0.22], '#3d4d4c', [0, -0.14, 0]);
     return { hip, knee };
   });
-  [-0.36, 0.36].forEach(a => box(g, [0.16, 0.55, 0.19], color, [a, 1.02, 0]));
+  const arms = [-1, 1].map(side => {
+    const shoulder = group(g, side * 0.34, 1.27, 0);
+    box(shoulder, [0.17, 0.32, 0.19], color, [0, -0.16, 0]);
+    const elbow = group(shoulder, 0, -0.32, 0);
+    box(elbow, [0.15, 0.28, 0.17], color, [0, -0.14, 0]);
+    const hand = mesh(elbow, new THREE.IcosahedronGeometry(0.095, 1), '#d3a082', [0, -0.31, 0]);
+    shoulder.rotation.z = side * 0.04;
+    return { side, shoulder, elbow, hand };
+  });
   const name = sign(g, username.slice(0, 22), 1.7, [0, 2.17, 0]);
   const chatCanvas = document.createElement('canvas'); chatCanvas.width = 1024; chatCanvas.height = 512;
   const chatContext = chatCanvas.getContext('2d');
   const chatTexture = new THREE.CanvasTexture(chatCanvas); chatTexture.colorSpace = THREE.SRGBColorSpace;
   const chatBubble = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 1.7), new THREE.MeshBasicMaterial({ map: chatTexture, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
-  chatBubble.position.set(0, 3.08, 0); chatBubble.visible = false; g.add(chatBubble);
+  chatBubble.position.set(0, 3.08, 0); chatBubble.scale.setScalar(0.001); chatBubble.visible = false; g.add(chatBubble);
   const face = group(g, 0, 1.65, -0.2, Math.PI);
   const pupils = [-0.095, 0.095].map(x => {
     mesh(face, new THREE.SphereGeometry(0.085, 10, 8), '#fff8e6', [x, 0.045, 0.015]);
     return mesh(face, new THREE.SphereGeometry(0.033, 8, 6), '#262c30', [x, 0.045, 0.092]);
   });
   const mouth = mesh(face, new THREE.BufferGeometry(), '#60362e');
-  let currentSeed, chatUntil = 0;
+  let currentSeed, chatUntil = 0, chatShownAt = 0, chatScale = 1, chatHeight = 3.08;
   function showChat(message) {
     const words = String(message).trim().slice(0, 100).split(/\s+/), lines = [];
     chatContext.font = '600 54px sans-serif';
@@ -161,9 +171,28 @@ export function avatar(parent, username, color, faceSeed = 0) {
     chatContext.fillStyle = '#28352e'; chatContext.textAlign = 'center'; chatContext.textBaseline = 'middle';
     const lineHeight = 68, firstY = 230 - (lines.length - 1) * lineHeight / 2;
     lines.forEach((line, index) => chatContext.fillText(line, 512, firstY + index * lineHeight, 790));
-    chatTexture.needsUpdate = true; chatBubble.visible = true; chatUntil = performance.now() + 5000;
+    chatTexture.needsUpdate = true;
+    chatShownAt = performance.now();
+    chatUntil = chatShownAt + THREE.MathUtils.clamp(3300 + String(message).length * 34, 3800, 6200);
+    chatBubble.scale.setScalar(0.001 * chatScale);
+    chatBubble.visible = true;
   }
-  function updateChat(now) { if (chatBubble.visible && now >= chatUntil) chatBubble.visible = false; }
+  function updateChat(now) {
+    if (!chatBubble.visible) return;
+    const age = Math.max(0, now - chatShownAt), remaining = chatUntil - now;
+    if (remaining <= 0) { chatBubble.visible = false; chatBubble.scale.setScalar(0.001 * chatScale); return; }
+    const t = THREE.MathUtils.clamp(age / 250, 0, 1);
+    const back = 1 + 1.70158 * Math.pow(t - 1, 3) + 0.70158 * Math.pow(t - 1, 2);
+    const out = THREE.MathUtils.clamp(remaining / 230, 0, 1);
+    const s = Math.max(0.001, back * Math.min(1, out));
+    chatBubble.scale.setScalar(s * chatScale);
+    chatBubble.position.y = chatHeight + (1 - Math.min(1, s)) * 0.12;
+  }
+  function setChatPresentation(scale = 1, height = 3.08) {
+    chatScale = THREE.MathUtils.clamp(Number(scale) || 1, 0.35, 1.4);
+    chatHeight = Number(height) || 3.08;
+    chatBubble.position.y = chatHeight;
+  }
   function setFace(seed = 0) {
     if (seed === currentSeed) return;
     currentSeed = seed;
@@ -186,7 +215,7 @@ export function avatar(parent, username, color, faceSeed = 0) {
   function setSeated(value) {
     legs.forEach(({ hip, knee }) => { hip.rotation.x = value ? Math.PI / 2 : 0; knee.rotation.x = value ? -Math.PI / 2 : 0; });
   }
-  return { group: g, name, chatBubble, setFace, showChat, updateChat, setSeated };
+  return { group: g, name, chatBubble, arms, setFace, showChat, updateChat, setChatPresentation, setSeated };
 }
 export function receptionist(parent, x, y, z) {
   const g = group(parent, x, y, z);

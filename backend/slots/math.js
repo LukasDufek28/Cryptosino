@@ -1,5 +1,6 @@
 const crypto = require('node:crypto');
 const SLOTS_CONFIG = require('../../frontend/src/slots/config.json');
+const { spinOlympusRound } = require('./olympus');
 
 function slotsSpinReel(strip, reelIdx, serverSeed, clientSeed, nonce, offset = 0) {
   const hash = crypto.createHmac('sha256', serverSeed).update(`${clientSeed}:${nonce}:r${reelIdx + offset}`).digest('hex');
@@ -157,6 +158,7 @@ function spinJokerRound({ config, wager, serverSeed, seed, nonce }) {
 function spinRound({ variant, wager, serverSeed, seed, nonce }) {
   const config = SLOTS_CONFIG[variant];
   if (variant === 'joker') return spinJokerRound({ config, wager, serverSeed, seed, nonce });
+  if (variant === 'olympus') return spinOlympusRound({ config, wager, serverSeed, seed, nonce });
   const stops = config.reels.map((strip, i) => slotsSpinReel(strip, i, serverSeed, seed, nonce));
   const visible = getSlotsVisible(config, stops);
   const { wins, totalPayout } = evaluatePaylines(config, visible, wager);

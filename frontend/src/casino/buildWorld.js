@@ -4,6 +4,7 @@ import layout from './worldLayout.json';
 import leaderboardBoard from './leaderboardBoard';
 import liveSlotMachine from './liveSlotMachine';
 import liveOlympusMachine from './liveOlympusMachine';
+import liveBlackjackTable from './liveBlackjackTable';
 import tradingFacility from './tradingFacility';
 import { box, cylinder, group, mesh, sign, plant, couch, floorLamp, pendant, slotMachine, gameTable, car, receptionist as receptionistModel } from './models';
 
@@ -144,17 +145,31 @@ export default function buildWorld(scene) {
   box(building, [19.1, 0.035, 8.1], '#365345', [2.3, upper + 0.04, -4.9]);
   sign(building, 'THE AMBER HOUSE', 7, [2, upper + 3.35, -9.72], { serif: true });
   sign(building, 'GAMES  /  LOUNGE  /  GOOD COMPANY', 5.2, [2, upper + 2.15, -9.7]);
+  let liveBlackjack = null;
+  const tablePlacard = s => {
+    const side = s.x > 7 ? -1 : 1;
+    const stand = group(building, s.x + side * 3.0, upper, s.z + 0.35);
+    cylinder(stand, 0.035, 0.045, 0.9, '#b79a65', [0, 0.45, 0], 8);
+    cylinder(stand, 0.22, 0.27, 0.05, '#8a6946', [0, 0.025, 0], 10);
+    box(stand, [1.64, 0.46, 0.07], '#1f3731', [0, 1.08, -0.035]);
+    const panel = sign(stand, s.game.toUpperCase(), 1.55, [0, 1.08, 0.004], { background: '#284a40', serif: true, fontSize: 58 });
+    panel.rotation.y = 0;
+  };
   layout.stations.forEach(s => {
     if (s.game === 'slots') return;
     else if (s.game === 'crash') { slotMachine(building, s.x, upper, s.z, 'SKYLINE'); block(s.x, s.z, 1.6, 1.15, 2); }
-    else { gameTable(building, s.x, upper, s.z, s.game === 'dice'); block(s.x, s.z, 4.25, 2.5, 2); }
-    sign(building, s.game.toUpperCase(), 2.3, [s.x, upper + 2.9, s.z - 0.8]);
+    else {
+      const table = gameTable(building, s.x, upper, s.z, s.game === 'dice', s.game === 'blackjack');
+      if (s.game === 'blackjack') liveBlackjack = liveBlackjackTable(table);
+      block(s.x, s.z, 4.25, 2.5, 2);
+      tablePlacard(s);
+    }
   });
   const liveSlots = layout.slotMachines.map(m => {
     block(m.x, m.z, 1.94, 1.05, 2);
     return m.variant === 'olympus' ? liveOlympusMachine(building, m, upper) : liveSlotMachine(building, m, upper);
   });
-  layout.seats.filter(s => s.kind !== 'slot').forEach(s => {
+  layout.seats.filter(s => s.kind !== 'slot' && s.kind !== 'blackjack').forEach(s => {
     box(building, [5.9, 0.026, 4.5], '#b08565', [s.x, upper + 0.03, s.z + 0.9]);
     couch(building, s.x, upper, s.z); block(s.x, s.z, 3.95, 1.4, 2);
     const table = cylinder(building, 0.75, 0.75, 0.1, '#ceae7b', [s.x, upper + 0.55, s.z + 2.15], 10);
@@ -170,5 +185,5 @@ export default function buildWorld(scene) {
     const m = new THREE.Mesh(new THREE.RingGeometry(0.43, 0.48, 32), new THREE.MeshBasicMaterial({ color: '#e4bc73', side: THREE.DoubleSide, transparent: true, opacity: 0.75 }));
     m.rotation.x = -Math.PI / 2; m.position.set(s.x, upper + 0.07, s.z + 2.5); building.add(m); return m;
   });
-  return { cars, obstacles, markers, mirror, faceButton, leaderboard, peakLeaderboard, receptionist, resetButton, liveSlots, trading };
+  return { cars, obstacles, markers, mirror, faceButton, leaderboard, peakLeaderboard, receptionist, resetButton, liveSlots, liveBlackjack, trading };
 }

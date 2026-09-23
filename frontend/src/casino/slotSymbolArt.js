@@ -35,7 +35,47 @@ function cachedSymbol(symbol){
   if(f) f(ctx); else card(ctx,{ACE:'A',KING:'K',QUEEN:'Q',JACK:'J',TEN:'10'}[symbol]||String(symbol));
   symbolCache.set(symbol,canvas); return canvas;
 }
-export function drawSlotSymbol(c,symbol,x,y,size,{highlight=false}={}){
+const AMBER_ASSETS = {
+  CHERRY:'/casino/amber-cherry.png?v=4',
+  LEMON:'/casino/amber-lemon.png?v=4',
+  ORANGE:'/casino/amber-orange.png?v=4',
+  PLUM:'/casino/amber-plum.png?v=4',
+  GRAPES:'/casino/amber-grapes.png?v=4',
+  MELON:'/casino/amber-melon.png?v=4',
+  BELL:'/casino/amber-bell.png?v=4',
+  JOKER:'/casino/amber-joker.png?v=4',
+  JOKER_GLOW:'/casino/amber-joker-glow.png?v=4',
+};
+const amberImages = new Map();
+let amberRevision = 0;
+function amberImage(key){
+  if(typeof Image==='undefined'||!AMBER_ASSETS[key]) return null;
+  if(amberImages.has(key)) return amberImages.get(key);
+  const img=new Image(); img.decoding='async'; img.src=AMBER_ASSETS[key];
+  img.onload=()=>{ amberRevision+=1; };
+  img.onerror=()=>{ img.__failed=true; amberRevision+=1; };
+  amberImages.set(key,img); return img;
+}
+Object.keys(AMBER_ASSETS).forEach(amberImage);
+export function slotArtRevision(){ return amberRevision; }
+
+export function drawSlotSymbol(c,symbol,x,y,size,{highlight=false,amber=false}={}){
+  if(amber && AMBER_ASSETS[symbol]){
+    const key=symbol==='JOKER'&&highlight?'JOKER_GLOW':symbol;
+    const generated=amberImage(key);
+    if(generated?.complete&&generated.naturalWidth>0&&!generated.__failed){
+      c.save();
+      c.translate(x,y);
+      c.shadowColor=highlight?'rgba(255,203,58,.95)':'rgba(0,0,0,.48)';
+      c.shadowBlur=highlight?32:12;
+      c.shadowOffsetY=highlight?0:6;
+      const scale=symbol==='JOKER'?1.03:.96;
+      const drawSize=size*scale;
+      c.drawImage(generated,-drawSize/2,-drawSize/2,drawSize,drawSize);
+      c.restore();
+      return;
+    }
+  }
   const img=cachedSymbol(symbol); c.save(); c.translate(x,y);
   c.shadowColor=highlight?'#ffd65a':'rgba(0,0,0,.38)'; c.shadowBlur=highlight?22:9; c.shadowOffsetY=5;
   c.drawImage(img,-size/2,-size/2,size,size); c.restore();

@@ -24,7 +24,7 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance, bala
     if (!ready) return undefined;
     const scene = sceneRef.current;
     let stopped = false, active = null, claiming = false, pending = null, sending = false, autoSpinning = false, autoTimer = null;
-    let endAt = 0, resultText = '', pendingBalance = null, messageTimer = null, machines = [];
+    let endAt = 0, resultText = '', pendingBalance = null, messageTimer = null, machines = [], autoDelayMs = 650;
     const controllers = new Set();
     const request = async (path, body) => {
       const controller = new AbortController(); controllers.add(controller);
@@ -65,10 +65,11 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance, bala
     };
     const queueAutoSpin = () => {
       if (!autoSpinning || stopped || !active || autoTimer) return;
+      const delay=autoDelayMs;autoDelayMs=650;
       autoTimer = setTimeout(() => {
         autoTimer = null;
         if (autoSpinning && active && scene.pose().seatId === `seat-${active}` && !stopped) actions.current.spin?.(betRef.current);
-      }, 650);
+      }, delay);
     };
     actions.current = {
       betDown() { if (!sending && !pending && active) setBet(value => stepBet(value, -1)); },
@@ -90,7 +91,7 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance, bala
           active = id; endAt = 0; resultText = ''; setShowPaytable(false);
           const selectedMachine = layout.slotMachines.find(machine => machine.id === id);
           scene.sitAtSlot(id); startSlotAmbience(); setSelected(selectedMachine);
-          setMessage(selectedMachine?.variant === 'olympus' ? 'Olympus preview is online; tumble gameplay tuning continues.' : 'Choose your stake and spin.'); setBusy(false);
+          setMessage('Choose your stake and spin.'); setBusy(false);
         } catch (error) { if (!stopped) setMessage(error.message); }
         finally { claiming = false; }
       },
@@ -99,6 +100,7 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance, bala
         const now = performance.now();
         if (!pending && active && now < endAt) {
           if (LOCAL_DEMO) {
+            endAt = Math.max(now + 250, endAt - 650);
             machines = machines.map(item => item.id === active
               ? { ...item, presentationOffsetMs: Math.min(Math.max(0, item.spin?.durationMs - 250), Number(item.presentationOffsetMs || 0) + 650) }
               : item);
@@ -114,7 +116,6 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance, bala
         setShowPaytable(false);
         clearMessageTimer();
         const machine = layout.slotMachines.find(item => item.id === active);
-        if (machine?.variant === 'olympus') { setMessage('Olympus preview is online; tumble gameplay is still being tuned.'); return; }
         if (!pending) {
           const amount = Number(wager);
           if (!Number.isFinite(amount) || amount < 0.1 || amount > 1000000 || Math.abs(amount * 100 - Math.round(amount * 100)) > 0.00001) {
@@ -137,6 +138,9 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance, bala
           endAt = performance.now() + Math.max(0, spin.startedAt + spin.durationMs - serverNow);
           pendingBalance = Number(result.newBalance);
           resultText = `Return $${Number(spin.totalPayout).toFixed(2)} (stake $${Number(spin.bet).toFixed(2)}).`;
+          const multiple=Number(spin.totalPayout||0)/Math.max(.01,Number(spin.bet||1));
+          const maxWinX=Number(layout.slotMachines.find(item=>item.id===active)?.variant==='joker'?486:500);
+          autoDelayMs=multiple>=maxWinX*.98?6900:multiple>=50?5800:multiple>=25?5000:multiple>=10?4000:multiple>=3?3100:(spin.respin?.count?1500:700);
           if (spin.startedAt + spin.durationMs <= serverNow) {
             endAt = 0; setBalance(pendingBalance); pendingBalance = null; setBusy(false); showResultMessage(resultText); queueAutoSpin();
           } else setMessage('Reels spinning…');

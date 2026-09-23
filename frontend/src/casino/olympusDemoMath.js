@@ -1,0 +1,30 @@
+const NORMAL_SYMBOLS=['BLUE','GREEN','YELLOW','PURPLE','RED','CHALICE','RING','HOURGLASS','CROWN'];
+const key=(r,y)=>`${r}:${y}`;
+const clone=g=>g.map(c=>[...c]);
+function weighted(weights){const entries=Object.entries(weights);const total=entries.reduce((s,[,w])=>s+Number(w),0);let roll=Math.random()*total;for(const [sym,w] of entries){roll-=Number(w);if(roll<0)return sym;}return entries.at(-1)[0];}
+function multValue(config){const vals=config.multiplierValues,ws=config.multiplierWeights;let roll=Math.random()*ws.reduce((s,w)=>s+Number(w),0);for(let i=0;i<vals.length;i++){roll-=Number(ws[i]);if(roll<0)return Number(vals[i]);}return Number(vals.at(-1));}
+function pick(config,free){const sym=weighted(free&&config.freeWeights?config.freeWeights:config.weights);return sym==='MULT'?`MULT:${multValue(config)}`:sym;}
+function grid(config,free){return Array.from({length:config.cols},()=>Array.from({length:config.rows},()=>pick(config,free)));}
+function tier(pays,count){return count>=12?Number(pays?.[2]||0):count>=10?Number(pays?.[1]||0):count>=8?Number(pays?.[0]||0):0;}
+function evaluate(config,g,wager){const wins=[],removed=new Set();let base=0;for(const sym of NORMAL_SYMBOLS){const cells=[];for(let r=0;r<g.length;r++)for(let y=0;y<g[r].length;y++)if(g[r][y]===sym)cells.push({reel:r,row:y});const m=tier(config.paytable[sym],cells.length);if(!m)continue;const payout=Number((wager*m).toFixed(4));base+=payout;cells.forEach(c=>removed.add(key(c.reel,c.row)));wins.push({line:-1,symbol:sym,count:cells.length,mult:m,payout,cells});}return{wins,removed,basePayout:Number(base.toFixed(4))};}
+function collapse(config,g,removed,free){return g.map((column,reel)=>{const kept=column.filter((_,row)=>!removed.has(key(reel,row)));return[...Array.from({length:config.rows-kept.length},()=>pick(config,free)),...kept];});}
+function multipliers(g){const out=[];for(let r=0;r<g.length;r++)for(let y=0;y<g[r].length;y++){const v=g[r][y];if(typeof v==='string'&&v.startsWith('MULT:'))out.push({reel:r,row:y,value:Number(v.slice(5))||2});}return out;}
+function scatters(g){return g.reduce((sum,c)=>sum+c.filter(v=>v==='SCATTER').length,0);}
+function scatterPay(config,count,wager){return Number((wager*Number(config.scatterPays?.[String(Math.min(count,6))]||0)).toFixed(4));}
+function sequence(config,wager,free=false,featureSpin=0,featureMultiplier=0){let g=grid(config,free),initialVisible=clone(g),rounds=[],baseTotal=0,maxScatters=scatters(g);for(let tumble=0;tumble<Number(config.maxTumbles||40);tumble++){maxScatters=Math.max(maxScatters,scatters(g));const ev=evaluate(config,g,wager),mults=multipliers(g);rounds.push({kind:'olympus',mode:free?'free':'base',featureSpin,tumble,visible:clone(g),wins:ev.wins,roundPayout:ev.basePayout,removedCells:[...ev.removed].map(k=>{const[reel,row]=k.split(':').map(Number);return{reel,row};}),multipliers:mults,scatterCount:scatters(g),featureMultiplier});if(!ev.wins.length)break;baseTotal+=ev.basePayout;g=collapse(config,g,ev.removed,free);}maxScatters=Math.max(maxScatters,scatters(g));return{initialVisible,visible:clone(g),rounds,baseTotal:Number(baseTotal.toFixed(4)),endingMultipliers:multipliers(g),scatterCount:maxScatters};}
+function cap(v,remaining){return Number(Math.max(0,Math.min(v,remaining)).toFixed(2));}
+export function spinOlympusDemo(config,wager){const maxPayout=wager*Number(config.maxWinX||5000),allRounds=[],allWins=[];let totalPayout=0;const base=sequence(config,wager);const baseMultiplier=base.baseTotal>0&&base.endingMultipliers.length?base.endingMultipliers.reduce((s,m)=>s+m.value,0):1;const baseScatter=scatterPay(config,base.scatterCount,wager),basePayout=cap(base.baseTotal*baseMultiplier+baseScatter,maxPayout);totalPayout+=basePayout;for(let i=0;i<base.rounds.length;i++){const round=base.rounds[i],settled=i===base.rounds.length-1;allRounds.push({...round,sequenceMultiplier:settled?baseMultiplier:1,sequencePayout:settled?basePayout:0,scatterPayout:settled?baseScatter:0});}base.rounds.forEach(r=>r.wins.forEach(w=>allWins.push({...w,mode:'base',tumble:r.tumble})));
+let remaining=base.scatterCount>=4?Number(config.freeSpins||15):0,played=0,retriggers=0,featureMultiplier=0;
+const initialFreeSpins=remaining;
+while(remaining>0&&totalPayout<maxPayout&&played<Number(config.maxFreeSpins||60)){
+  remaining--;played++;
+  const playedNow=played,seq=sequence(config,wager,true,playedNow,featureMultiplier);
+  if(seq.baseTotal>0&&seq.endingMultipliers.length)featureMultiplier+=seq.endingMultipliers.reduce((s,m)=>s+m.value,0);
+  const active=Math.max(1,featureMultiplier),sp=scatterPay(config,seq.scatterCount,wager),seqPayout=cap(seq.baseTotal*active+sp,maxPayout-totalPayout);totalPayout+=seqPayout;
+  let retriggeredSpins=0;
+  if(seq.scatterCount>=Number(config.retriggerScatters||3)){retriggeredSpins=Number(config.retriggerSpins||5);remaining+=retriggeredSpins;retriggers+=retriggeredSpins;}
+  const remainingAfter=remaining,lastIndex=seq.rounds.length-1,previousMultiplier=Math.max(1,Number(seq.rounds[0]?.featureMultiplier||0));
+  for(let i=0;i<seq.rounds.length;i++){const round=seq.rounds[i],settled=i===lastIndex;allRounds.push({...round,featureMultiplier:settled?active:previousMultiplier,sequenceMultiplier:settled?active:previousMultiplier,sequencePayout:settled?seqPayout:0,scatterPayout:settled?sp:0,retriggeredSpins:settled?retriggeredSpins:0,freeSpinsRemaining:remainingAfter});}
+  for(const round of seq.rounds)for(const win of round.wins)allWins.push({...win,mode:'free',featureSpin:playedNow,tumble:round.tumble});
+}
+const durationMs=Math.min(60000,Math.max(3200,allRounds.length*Number(config.roundDurationMs||1350)+600));return{stops:[],visible:base.visible,initialVisible:base.initialVisible,wins:allWins,rounds:allRounds,totalPayout:Number(totalPayout.toFixed(2)),respin:null,durationMs,olympus:{triggeredFreeSpins:initialFreeSpins>0,initialFreeSpins,freeSpinsPlayed:played,retriggeredSpins:retriggers,finalMultiplier:featureMultiplier,baseMultiplier,baseScatterCount:base.scatterCount,maxWinReached:totalPayout>=maxPayout}};}

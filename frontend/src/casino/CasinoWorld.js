@@ -8,6 +8,7 @@ import useLeaderboard from './useLeaderboard';
 import useTradingMarket from './useTradingMarket';
 import TradingDesk from './TradingDesk';
 import useSlotMachines from './useSlotMachines';
+import useBlackjackTable from './useBlackjackTable';
 import layout from './worldLayout.json';
 import casinoVersion from './version.json';
 import { LOCAL_DEMO } from './demoCasino';
@@ -83,9 +84,16 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
   const [chatText, setChatText] = useState('');
   const openGameRef = useRef(null);
   const openSlotRef = useRef(null);
+  const blackjackRef = useRef(null);
   const resetBalanceRef = useRef(null);
   const resetBusyRef = useRef(false);
   openGameRef.current = game => {
+    if (game === 'blackjack') {
+      setActiveGame(null); setPanel(null);
+      if (!token && !LOCAL_DEMO) setPanel('auth');
+      else blackjackRef.current?.claim?.();
+      return;
+    }
     setActiveGame(game);
     if (game === 'trading') setPanel(token && user ? 'trading' : 'auth');
     else setPanel(LOCAL_DEMO || (token && user) ? 'game' : 'auth');
@@ -129,6 +137,8 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
   useLeaderboard(sceneRef, ready);
   const tradingMarket = useTradingMarket(sceneRef, ready);
   const slots = useSlotMachines(sceneRef, ready, token, setBalance, balance);
+  const blackjack = useBlackjackTable(sceneRef, ready, token, setBalance, balance);
+  blackjackRef.current = blackjack;
   openSlotRef.current = id => { if (!token && !LOCAL_DEMO) { setActiveGame(null); setPanel('auth'); } else slots.claim(id); };
   // Signing out also closes any retained authenticated game screen.
   useEffect(() => { if (!token && !LOCAL_DEMO) setPanel(current => ['game', 'trading'].includes(current) ? null : current); }, [token]);
@@ -174,7 +184,7 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
       <div className="amber-reticle" aria-hidden="true">·</div>
       <div className="amber-floor-label"><span>0{status.floor}</span><div><small>{status.floor === 2 ? 'UPSTAIRS' : 'GROUND FLOOR'}</small><strong>{status.floor === 2 ? 'The casino & lounge' : 'The welcome hall'}</strong></div></div>
       {status.prompt && <button className="amber-interact" onClick={() => sceneRef.current?.interact()}><kbd>E</kbd>{status.prompt}<span>↗</span></button>}
-      {seat && !slots.selected && <div className="amber-seated">Take your time. Watch the city go by.</div>}
+      {seat && !slots.selected && !blackjack.active && <div className="amber-seated">Take your time. Watch the city go by.</div>}
       {!status.locked && <button className="amber-resume" onClick={() => sceneRef.current?.lock()}>Click the scene to look around · or drag</button>}
       <div className="amber-mobile-controls" aria-label="Movement controls">
         {[[0, 1, '↑'], [-1, 0, '←'], [0, -1, '↓'], [1, 0, '→']].map(([x, y, label]) => <button key={label} aria-label={`Move ${label}`} onPointerDown={e => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); sceneRef.current?.move(x, y); }} onPointerUp={() => sceneRef.current?.move(0, 0)} onPointerCancel={() => sceneRef.current?.move(0, 0)} onLostPointerCapture={() => sceneRef.current?.move(0, 0)}>{label}</button>)}

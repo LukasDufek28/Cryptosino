@@ -1,4 +1,5 @@
 import configs from '../slots/config.json';
+import { spinOlympusDemo } from './olympusDemoMath';
 
 export const LOCAL_DEMO = typeof window !== 'undefined' &&
   ['localhost', '127.0.0.1'].includes(window.location.hostname);
@@ -149,16 +150,18 @@ export function demoSlotSpin({ variant = 'joker', bet, balance, machineId = `dem
   const wager = Number(bet);
   const outcome = variant === 'joker'
     ? spinJoker(config, wager)
-    : (() => {
-        const visible = pickVisible(config);
-        const evaluation = evaluateLines(config, visible, wager);
-        return { visible, initialVisible: visible.map(reel => [...reel]), wins: evaluation.wins,
-          rounds: [{ visible, wins: evaluation.wins, roundPayout: evaluation.totalPayout, heldCells: [], lockedCells: [], newlyLocked: [] }],
-          totalPayout: evaluation.totalPayout,
-          respin: { triggered: false, count: 0, lockedCells: [], lockedReels: [], respunReels: [] } };
-      })();
+    : variant === 'olympus'
+      ? spinOlympusDemo(config, wager)
+      : (() => {
+          const visible = pickVisible(config);
+          const evaluation = evaluateLines(config, visible, wager);
+          return { visible, initialVisible: visible.map(reel => [...reel]), wins: evaluation.wins,
+            rounds: [{ visible, wins: evaluation.wins, roundPayout: evaluation.totalPayout, heldCells: [], lockedCells: [], newlyLocked: [] }],
+            totalPayout: evaluation.totalPayout,
+            respin: { triggered: false, count: 0, lockedCells: [], lockedReels: [], respunReels: [] } };
+        })();
   const startedAt = Date.now();
-  const durationMs = Math.max(2800, (outcome.rounds?.length || 1) * 2850);
+  const durationMs = Number(outcome.durationMs) || Math.max(2800, (outcome.rounds?.length || 1) * 2850);
   const spin = {
     machineId,
     variant,

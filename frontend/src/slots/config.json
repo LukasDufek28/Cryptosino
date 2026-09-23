@@ -2629,7 +2629,6 @@
     "name": "Amber Olympus",
     "mathVersion": "amber-olympus-v1",
     "custom": true,
-    "previewOnly": true,
     "rows": 5,
     "cols": 6,
     "payAnywhere": true,
@@ -2659,8 +2658,8 @@
       "RING": 7,
       "HOURGLASS": 5,
       "CROWN": 3.5,
-      "SCATTER": 1.15,
-      "MULT": 0.9
+      "SCATTER": 1.7,
+      "MULT": 0.3
     },
     "paytable": {
       "BLUE": [
@@ -2675,32 +2674,32 @@
       ],
       "YELLOW": [
         0.5,
-        1,
+        1.5,
         5
       ],
       "PURPLE": [
         0.8,
-        1.2,
+        2,
         8
       ],
       "RED": [
         1,
-        1.5,
+        2.5,
         10
       ],
       "CHALICE": [
-        1.5,
         2,
+        5,
         12
       ],
       "RING": [
-        2,
-        5,
+        2.5,
+        10,
         15
       ],
       "HOURGLASS": [
-        2.5,
-        10,
+        5,
+        15,
         25
       ],
       "CROWN": [
@@ -2732,24 +2731,40 @@
       500
     ],
     "multiplierWeights": [
-      28,
-      24,
-      18,
-      14,
-      10,
+      24.9,
+      20.9,
+      15.6,
+      12.3,
+      9,
       7,
-      5,
-      4,
-      3,
-      2.3,
-      1.8,
-      1,
-      0.55,
-      0.18,
-      0.06
+      5.85,
+      4.85,
+      3.99,
+      3.29,
+      2.76,
+      1.79,
+      0.98,
+      0.311,
+      0.091
     ],
     "freeSpins": 15,
     "retriggerScatters": 3,
-    "retriggerSpins": 5
+    "retriggerSpins": 5,
+    "maxTumbles": 40,
+    "maxFreeSpins": 60,
+    "roundDurationMs": 1350,
+    "freeWeights": {
+      "BLUE": 18,
+      "GREEN": 17,
+      "YELLOW": 16,
+      "PURPLE": 15,
+      "RED": 13,
+      "CHALICE": 9,
+      "RING": 7,
+      "HOURGLASS": 5,
+      "CROWN": 3.5,
+      "SCATTER": 2.125,
+      "MULT": 0.42
+    }
   }
 }

@@ -40,6 +40,7 @@ export default function createScene(host, events) {
   const pos = new THREE.Vector3(layout.spawn.x, layout.spawn.y, layout.spawn.z);
   let yaw = layout.spawn.yaw, pitch = -0.05, floor = 2, seat = null;
   let slotCommand = null, slotStateReceiver = null, slotAction = null, slotHover = null;
+  let blackjackAction = null, blackjackHover = null, blackjackPublisher = null;
   let traversingStairs = false;
   let jumpHeight = 0, jumpVelocity = 0;
   const gravity = 18, jumpSpeed = 5.5;
@@ -51,7 +52,7 @@ export default function createScene(host, events) {
   const keys = new Set();
   const direction = new THREE.Vector3();
   const focus = new THREE.Vector3();
-  const raycaster = new THREE.Raycaster(); raycaster.far = 3.2;
+  const raycaster = new THREE.Raycaster(); raycaster.far = 4.6;
   const pointer = new THREE.Vector2();
   const touch = { x: 0, y: 0 };
   const clamp = THREE.MathUtils.clamp;
@@ -91,9 +92,38 @@ export default function createScene(host, events) {
     if (!machine || !slotHover || !slotAction) return false;
     machine.press(slotHover); slotAction(slotHover); return true;
   }
+  function activeBlackjackTable() { return seat?.kind === 'blackjack' ? world.liveBlackjack : null; }
+  function setBlackjackHover(action) {
+    if (blackjackHover === action) return;
+    blackjackHover = action || null;
+    world.liveBlackjack?.setHover(blackjackHover);
+  }
+  function updateBlackjackHover(clientX = null, clientY = null) {
+    const table = activeBlackjackTable();
+    if (!table) { setBlackjackHover(null); return; }
+    if (document.pointerLockElement === canvas || (clientX === null && cursorX === null)) pointer.set(0, 0);
+    else {
+      const rect = canvas.getBoundingClientRect(), px = clientX ?? cursorX, py = clientY ?? cursorY;
+      pointer.set(((px - rect.left) / rect.width) * 2 - 1, -((py - rect.top) / rect.height) * 2 + 1);
+    }
+    raycaster.setFromCamera(pointer, camera);
+    const visibleControls = table.controls.filter(object => {
+      const action = object.userData?.blackjackAction;
+      if (!action || !table.enabled?.(action)) return false;
+      for (let node = object; node; node = node.parent) if (node.visible === false) return false;
+      return true;
+    });
+    const hit = raycaster.intersectObjects(visibleControls, false)[0];
+    setBlackjackHover(hit?.object?.userData?.blackjackAction || null);
+  }
+  function triggerBlackjackControl() {
+    const table = activeBlackjackTable();
+    if (!table || !blackjackHover || !blackjackAction || !table.press(blackjackHover)) return false;
+    blackjackAction(blackjackHover); return true;
+  }
   function stand() {
     if (!seat) return;
-    pos.set(seat.exitX, layout.upperFloor, seat.exitZ); seat = null; setSlotHover(null);
+    pos.set(seat.exitX, layout.upperFloor, seat.exitZ); seat = null; setSlotHover(null); setBlackjackHover(null);
     poseRevision += 1;
     events.onSeat(null);
   }
@@ -160,6 +190,7 @@ export default function createScene(host, events) {
     if (!enabled || !e.isPrimary || e.button !== 0) return;
     cursorX = e.clientX; cursorY = e.clientY;
     if (seat?.kind === 'slot') { updateSlotHover(e.clientX, e.clientY); if (triggerSlotControl()) { e.preventDefault(); return; } }
+    if (seat?.kind === 'blackjack') { updateBlackjackHover(e.clientX, e.clientY); if (triggerBlackjackControl()) { e.preventDefault(); return; } }
     if (document.pointerLockElement === canvas) return;
     dragging = true; dragPointer = e.pointerId; lastX = e.clientX; lastY = e.clientY; moved = false; canvas.setPointerCapture(e.pointerId);
   }
@@ -167,6 +198,7 @@ export default function createScene(host, events) {
     if (!enabled || document.hidden) return;
     cursorX = e.clientX; cursorY = e.clientY;
     if (seat?.kind === 'slot' && document.pointerLockElement !== canvas) updateSlotHover(e.clientX, e.clientY);
+    if (seat?.kind === 'blackjack' && document.pointerLockElement !== canvas) updateBlackjackHover(e.clientX, e.clientY);
     if (document.pointerLockElement === canvas) {
       if (skipLockedMove) { skipLockedMove = false; return; }
       look(e.movementX, e.movementY);
@@ -268,7 +300,7 @@ export default function createScene(host, events) {
     if (!seat && pos.y > layout.upperFloor - 0.1) {
       camera.getWorldDirection(direction);
       let best = 3.4;
-      const options = [...layout.stations.filter(item => item.game !== 'slots').map(item => ({ kind: 'game', item })), ...layout.seats.map(item => ({ kind: 'seat', item }))];
+      const options = [...layout.stations.filter(item => item.game !== 'slots').map(item => ({ kind: 'game', item })), ...layout.seats.filter(item => item.kind !== 'blackjack').map(item => ({ kind: 'seat', item }))];
       options.forEach(option => {
         const s = option.item;
         const distance = Math.hypot(pos.x - s.x, pos.z - s.z);
@@ -277,8 +309,11 @@ export default function createScene(host, events) {
       });
     }
     const slotLabels = { spin: 'SPIN', toggleAuto: 'AUTO', maxBet: 'MAX BET', betUp: 'BET +', betDown: 'BET −' };
+    const blackjackLabels = { clear: 'CLEAR BET', deal: 'DEAL', hit: 'HIT', stand: 'STAND', double: 'DOUBLE' };
     let prompt = '';
-    if (seat) prompt = seat.kind === 'slot' ? (slotHover ? `Click · ${slotLabels[slotHover] || 'CONTROL'}` : 'Aim at the cabinet controls · E to leave') : 'Stand up';
+    if (seat?.kind === 'slot') prompt = slotHover ? `Click · ${slotLabels[slotHover] || 'CONTROL'}` : 'Aim at the cabinet controls · E to leave';
+    else if (seat?.kind === 'blackjack') prompt = blackjackHover ? `Click · ${blackjackHover.startsWith('chip:') ? '$' + blackjackHover.slice(5) + ' CHIP' : blackjackLabels[blackjackHover] || 'CONTROL'}` : 'Aim at chips or table controls · E to leave';
+    else if (seat) prompt = 'Stand up';
     else if (nearest) prompt = nearest.kind === 'face' ? 'Randomize face' : nearest.kind === 'reset' ? 'Ask for $1,000 reset' : nearest.kind === 'seat' ? `Sit · ${nearest.item.name}` : `Play · ${nearest.item.name}`;
     events.onStatus({ floor, x: pos.x, z: pos.z, yaw, prompt, locked: document.pointerLockElement === canvas });
   }
@@ -324,7 +359,18 @@ export default function createScene(host, events) {
         jumpVelocity -= gravity * dt;
         if (jumpHeight <= 0) { jumpHeight = 0; jumpVelocity = 0; }
       }
-      camera.position.set(pos.x, THREE.MathUtils.lerp(camera.position.y, pos.y + jumpHeight + (seat?.kind === 'slot' ? 1.9 : seat ? 1.55 : 1.65), Math.min(dt * 12, 1)), pos.z);
+      const blackjackView = seat?.kind === 'blackjack';
+      const seatedEye = seat?.kind === 'slot' ? 1.9 : blackjackView ? 2.5 : seat ? 1.55 : 1.65;
+      const cameraBack = blackjackView ? .32 : 0;
+      const targetX = pos.x + Math.sin(yaw) * cameraBack;
+      const targetZ = pos.z + Math.cos(yaw) * cameraBack;
+      camera.position.set(
+        THREE.MathUtils.lerp(camera.position.x, targetX, Math.min(dt * 12, 1)),
+        THREE.MathUtils.lerp(camera.position.y, pos.y + jumpHeight + seatedEye, Math.min(dt * 12, 1)),
+        THREE.MathUtils.lerp(camera.position.z, targetZ, Math.min(dt * 12, 1))
+      );
+      const targetFov = blackjackView ? 58 : 68;
+      if (Math.abs(camera.fov - targetFov) > .01) { camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, Math.min(dt * 8, 1)); camera.updateProjectionMatrix(); }
       camera.rotation.set(pitch, yaw, 0, 'YXZ');
       self.group.position.set(pos.x, pos.y + jumpHeight + (seat?.kind === 'slot' ? 0.25 : seat ? -0.4 : 0), pos.z);
       self.setSeated(Boolean(seat));
@@ -334,7 +380,9 @@ export default function createScene(host, events) {
       world.receptionist.trackNearest([self.group.position, ...[...peers.values()].map(peer => peer.group.position)]);
       world.mirror.visible = floor === 1;
       if (seat?.kind === 'slot') updateSlotHover(); else setSlotHover(null);
+      if (seat?.kind === 'blackjack') updateBlackjackHover(); else setBlackjackHover(null);
       world.liveSlots.forEach(machine => machine.frame(now));
+      world.liveBlackjack?.frame(now, camera);
       localWorldSeconds = worldClock ? worldClock() : localWorldSeconds + dt;
       world.cars.forEach((c, i) => {
         const distance = carStarts[i] + localWorldSeconds * c.direction * c.speed;
@@ -366,6 +414,13 @@ export default function createScene(host, events) {
       pos.set(s.x, layout.upperFloor, s.z); yaw = s.yaw; pitch = -0.34;
       poseRevision += 1; events.onSeat(s.id);
     },
+    sitAtBlackjack() {
+      const s = layout.seats.find(item => item.kind === 'blackjack');
+      if (!s || disposed) return;
+      seat = s; floor = 2; jumpHeight = 0; jumpVelocity = 0;
+      pos.set(s.x, layout.upperFloor, s.z); yaw = s.yaw; pitch = -0.57;
+      poseRevision += 1; events.onSeat(s.id);
+    },
     updateSlots(machines, serverNow) {
       if (disposed) return;
       world.liveSlots.forEach(m => m.update(machines.find(state => state.id === m.id) || null, serverNow));
@@ -378,6 +433,10 @@ export default function createScene(host, events) {
     },
     setSlotStateReceiver(callback) { slotStateReceiver = callback; },
     receiveSlotState(state) { slotStateReceiver?.(state); },
+    setBlackjackAction(callback) { blackjackAction = callback; },
+    setBlackjackPublisher(callback) { blackjackPublisher = callback; },
+    publishBlackjack(value) { blackjackPublisher?.(value); },
+    updateBlackjack(value, serverNow) { if (!disposed) world.liveBlackjack?.update(value, serverNow); },
     focus() { if (enabled && !disposed) canvas.focus({ preventScroll: true }); },
     setEnabled(value) { enabled = value; if (!value) { clearInput(); unlock(); } },
     move(x, y) { touch.x = x; touch.y = y; },
