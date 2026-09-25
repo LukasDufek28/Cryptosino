@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import layout from './worldLayout.json';
 import buildWorld from './buildWorld';
+import freezeStaticTransforms from './freezeStaticTransforms';
 import { avatar, clearMaterialCache } from './models';
 
 // One face per page visit; remains stable through scene remounts and sign-in.
@@ -31,6 +32,11 @@ export default function createScene(host, events) {
   sun.shadow.camera.updateProjectionMatrix();
   sun.shadow.normalBias = 0.03; scene.add(sun);
   const world = buildWorld(scene);
+  const animatedRoots = new Set([
+    ...world.cars.map(car => car.group), world.receptionist.group,
+    ...world.liveSlots.map(machine => machine.group), world.liveBlackjack?.group
+  ]);
+  freezeStaticTransforms(scene, animatedRoots);
   const carStarts = world.cars.map(c => c.group.position.x);
   let worldClock = null, localWorldSeconds = 0, poseRevision = 0;
   const self = avatar(scene, '', '#769b87', visitFaceSeed);
@@ -46,6 +52,7 @@ export default function createScene(host, events) {
   const gravity = 18, jumpSpeed = 5.5;
   const playerRadius = 0.45;
   let enabled = true, disposed = false, last = 0, uiAt = 0, nearest = null;
+  let statsVisible = false, statsStart = 0, statsFrames = 0, statsFrameTotal = 0, statsFrameWorst = 0;
   let chatSender = null;
   let dragging = false, lastX = 0, lastY = 0, moved = false, cursorX = null, cursorY = null;
   let dragPointer = null, skipLockedMove = true;
@@ -54,15 +61,26 @@ export default function createScene(host, events) {
   const focus = new THREE.Vector3();
   const raycaster = new THREE.Raycaster(); raycaster.far = 4.6;
   const pointer = new THREE.Vector2();
+  const frustum = new THREE.Frustum();
+  const viewProjection = new THREE.Matrix4();
+  const slotSphere = new THREE.Sphere(new THREE.Vector3(), 2.5);
+  const slotLocations = new Map(layout.slotMachines.map(item => [item.id, item]));
+  const groundInteractions = [{ kind: 'face', item: world.faceButton }, { kind: 'reset', item: world.resetButton },
+    ...world.trading.terminals.map(item => ({ kind: 'game', item }))];
+  const upperInteractions = [...layout.stations.filter(item => item.game !== 'slots').map(item => ({ kind: 'game', item })),
+    ...layout.seats.filter(item => item.kind !== 'blackjack').map(item => ({ kind: 'seat', item }))];
+  const inverseRotation = new THREE.Quaternion();
+  const nearbyPlayers = [self.group.position];
   const touch = { x: 0, y: 0 };
   const clamp = THREE.MathUtils.clamp;
   function unlock() { if (document.pointerLockElement === canvas) document.exitPointerLock(); }
   function look(dx, dy) {
+    if (seat?.kind === 'blackjack') return;
     yaw -= dx * 0.0025; yaw = Math.atan2(Math.sin(yaw), Math.cos(yaw));
     pitch = clamp(pitch - dy * 0.0025, -1.22, 1.22);
   }
   function lock() {
-    if (!enabled || disposed) return;
+    if (!enabled || disposed || seat?.kind === 'blackjack' || seat?.kind === 'slot') return;
     canvas.focus();
     if (!canvas.requestPointerLock || window.matchMedia('(pointer: coarse)').matches) return;
     try { const request = canvas.requestPointerLock(); if (request?.catch) request.catch(() => {}); } catch { /* drag-to-look remains available */ }
@@ -135,7 +153,12 @@ export default function createScene(host, events) {
   function interact() {
     if (!enabled) return;
     if (jumpHeight > 0 || jumpVelocity > 0) return;
-    if (seat) { stand(); return; }
+    if (seat) {
+      const leavingGame = seat.kind === 'slot' || seat.kind === 'blackjack';
+      stand();
+      if (leavingGame) lock();
+      return;
+    }
     if (!nearest) return;
     if (nearest.kind === 'reset') {
       keys.clear(); events.onResetBalance(); return;
@@ -184,21 +207,32 @@ export default function createScene(host, events) {
     if (dragPointer !== null && canvas.hasPointerCapture(dragPointer)) canvas.releasePointerCapture(dragPointer);
     dragPointer = null;
   }
-  function lockChanged() { clearInput(); skipLockedMove = true; }
-  function visibilityChanged() { if (document.hidden) clearInput(); skipLockedMove = true; }
+  function lockChanged() {
+    clearInput(); skipLockedMove = true;
+    if ((seat?.kind === 'blackjack' || seat?.kind === 'slot') && document.pointerLockElement === canvas) unlock();
+  }
+  function visibilityChanged() { if (document.hidden) { clearInput(); statsStart = 0; statsFrames = 0; statsFrameTotal = 0; statsFrameWorst = 0; } skipLockedMove = true; }
   function pointerDown(e) {
     if (!enabled || !e.isPrimary || e.button !== 0) return;
     cursorX = e.clientX; cursorY = e.clientY;
-    if (seat?.kind === 'slot') { updateSlotHover(e.clientX, e.clientY); if (triggerSlotControl()) { e.preventDefault(); return; } }
-    if (seat?.kind === 'blackjack') { updateBlackjackHover(e.clientX, e.clientY); if (triggerBlackjackControl()) { e.preventDefault(); return; } }
+    if (seat?.kind === 'slot') { updateSlotHover(e.clientX, e.clientY); triggerSlotControl(); e.preventDefault(); return; }
+    if (seat?.kind === 'blackjack') { updateBlackjackHover(e.clientX, e.clientY); triggerBlackjackControl(); e.preventDefault(); return; }
     if (document.pointerLockElement === canvas) return;
     dragging = true; dragPointer = e.pointerId; lastX = e.clientX; lastY = e.clientY; moved = false; canvas.setPointerCapture(e.pointerId);
   }
   function pointerMove(e) {
     if (!enabled || document.hidden) return;
     cursorX = e.clientX; cursorY = e.clientY;
-    if (seat?.kind === 'slot' && document.pointerLockElement !== canvas) updateSlotHover(e.clientX, e.clientY);
-    if (seat?.kind === 'blackjack' && document.pointerLockElement !== canvas) updateBlackjackHover(e.clientX, e.clientY);
+    if (seat?.kind === 'slot') {
+      if (document.pointerLockElement === canvas) unlock();
+      else updateSlotHover(e.clientX, e.clientY);
+      return;
+    }
+    if (seat?.kind === 'blackjack') {
+      if (document.pointerLockElement === canvas) unlock();
+      else updateBlackjackHover(e.clientX, e.clientY);
+      return;
+    }
     if (document.pointerLockElement === canvas) {
       if (skipLockedMove) { skipLockedMove = false; return; }
       look(e.movementX, e.movementY);
@@ -275,6 +309,7 @@ export default function createScene(host, events) {
     const inLane = pos.x > s.walkMinX && pos.x < s.walkMaxX;
     const onStairs = inLane && pos.z > s.topZ && pos.z < s.bottomZ;
     if (traversingStairs && onStairs) {
+      floor = 1;
       pos.y = layout.upperFloor * (s.bottomZ - pos.z) / (s.bottomZ - s.topZ);
     } else {
       // Only an explicitly started traversal can change height or floors.
@@ -290,7 +325,7 @@ export default function createScene(host, events) {
     if (!seat && floor === 1 && pos.y < 0.1) {
       camera.getWorldDirection(direction);
       let best = 3.4;
-      [{ kind: 'face', item: world.faceButton }, { kind: 'reset', item: world.resetButton }, ...world.trading.terminals.map(item => ({ kind: 'game', item }))].forEach(option => {
+      groundInteractions.forEach(option => {
         const item = option.item;
         const distance = Math.hypot(pos.x - item.x, pos.z - item.z);
         focus.set(item.x - pos.x, 0, item.z - pos.z).normalize();
@@ -300,19 +335,15 @@ export default function createScene(host, events) {
     if (!seat && pos.y > layout.upperFloor - 0.1) {
       camera.getWorldDirection(direction);
       let best = 3.4;
-      const options = [...layout.stations.filter(item => item.game !== 'slots').map(item => ({ kind: 'game', item })), ...layout.seats.filter(item => item.kind !== 'blackjack').map(item => ({ kind: 'seat', item }))];
-      options.forEach(option => {
+      upperInteractions.forEach(option => {
         const s = option.item;
         const distance = Math.hypot(pos.x - s.x, pos.z - s.z);
         focus.set(s.x - pos.x, 0, s.z - pos.z).normalize();
         if (distance < best && direction.dot(focus) > 0.12) { nearest = option; best = distance; }
       });
     }
-    const slotLabels = { spin: 'SPIN', toggleAuto: 'AUTO', maxBet: 'MAX BET', betUp: 'BET +', betDown: 'BET −' };
-    const blackjackLabels = { clear: 'CLEAR BET', deal: 'DEAL', hit: 'HIT', stand: 'STAND', double: 'DOUBLE' };
     let prompt = '';
-    if (seat?.kind === 'slot') prompt = slotHover ? `Click · ${slotLabels[slotHover] || 'CONTROL'}` : 'Aim at the cabinet controls · E to leave';
-    else if (seat?.kind === 'blackjack') prompt = blackjackHover ? `Click · ${blackjackHover.startsWith('chip:') ? '$' + blackjackHover.slice(5) + ' CHIP' : blackjackLabels[blackjackHover] || 'CONTROL'}` : 'Aim at chips or table controls · E to leave';
+    if (seat?.kind === 'slot' || seat?.kind === 'blackjack') prompt = '';
     else if (seat) prompt = 'Stand up';
     else if (nearest) prompt = nearest.kind === 'face' ? 'Randomize face' : nearest.kind === 'reset' ? 'Ask for $1,000 reset' : nearest.kind === 'seat' ? `Sit · ${nearest.item.name}` : `Play · ${nearest.item.name}`;
     events.onStatus({ floor, x: pos.x, z: pos.z, yaw, prompt, locked: document.pointerLockElement === canvas });
@@ -338,6 +369,7 @@ export default function createScene(host, events) {
   camera.position.copy(pos); camera.position.y += 1.65;
   renderer.setAnimationLoop(now => {
     if (disposed) return;
+    const frameStart = statsVisible ? performance.now() : 0;
     const dt = Math.min((now - (last || now)) / 1000, 0.045); last = now;
     if (!document.hidden) {
       if (enabled && !seat) {
@@ -375,14 +407,24 @@ export default function createScene(host, events) {
       self.group.position.set(pos.x, pos.y + jumpHeight + (seat?.kind === 'slot' ? 0.25 : seat ? -0.4 : 0), pos.z);
       self.setSeated(Boolean(seat));
       self.group.rotation.y = yaw;
-      self.chatBubble.quaternion.copy(camera.quaternion).premultiply(self.group.quaternion.clone().invert());
+      self.chatBubble.quaternion.copy(camera.quaternion).premultiply(inverseRotation.copy(self.group.quaternion).invert());
       self.updateChat(now);
-      world.receptionist.trackNearest([self.group.position, ...[...peers.values()].map(peer => peer.group.position)]);
+      nearbyPlayers.length = 1;
+      for (const peer of peers.values()) nearbyPlayers.push(peer.group.position);
+      world.receptionist.trackNearest(nearbyPlayers);
       world.mirror.visible = floor === 1;
       if (seat?.kind === 'slot') updateSlotHover(); else setSlotHover(null);
       if (seat?.kind === 'blackjack') updateBlackjackHover(); else setBlackjackHover(null);
-      world.liveSlots.forEach(machine => machine.frame(now));
-      world.liveBlackjack?.frame(now, camera);
+      if (floor === 2) {
+        camera.updateMatrixWorld();
+        frustum.setFromProjectionMatrix(viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse));
+        world.liveSlots.forEach(machine => {
+          const location = slotLocations.get(machine.id);
+          slotSphere.center.set(location.x, layout.upperFloor + 1.5, location.z);
+          if (frustum.intersectsSphere(slotSphere)) machine.frame(now);
+        });
+        world.liveBlackjack?.frame(now, camera);
+      }
       localWorldSeconds = worldClock ? worldClock() : localWorldSeconds + dt;
       world.cars.forEach((c, i) => {
         const distance = carStarts[i] + localWorldSeconds * c.direction * c.speed;
@@ -391,25 +433,42 @@ export default function createScene(host, events) {
       peers.forEach(p => {
         p.group.position.lerp(p.target, 1 - Math.exp(-dt * 25));
         p.group.rotation.y += Math.atan2(Math.sin(p.yaw - p.group.rotation.y), Math.cos(p.yaw - p.group.rotation.y)) * (1 - Math.exp(-dt * 25));
-        p.name.quaternion.copy(camera.quaternion).premultiply(p.group.quaternion.clone().invert());
-        p.chatBubble.quaternion.copy(camera.quaternion).premultiply(p.group.quaternion.clone().invert());
+        inverseRotation.copy(p.group.quaternion).invert();
+        p.name.quaternion.copy(camera.quaternion).premultiply(inverseRotation);
+        p.chatBubble.quaternion.copy(camera.quaternion).premultiply(inverseRotation);
         p.updateChat(now);
       });
-      if (now - uiAt > 150) { updateNearest(); uiAt = now; }
+      if (enabled && now - uiAt > 150) { updateNearest(); uiAt = now; }
       renderer.render(scene, camera);
+      if (statsVisible) {
+        const frameMs = performance.now() - frameStart;
+        statsFrames += 1; statsFrameTotal += frameMs; statsFrameWorst = Math.max(statsFrameWorst, frameMs);
+        if (!statsStart) statsStart = now;
+        const elapsed = now - statsStart;
+        if (elapsed >= 1000) {
+          const info = renderer.info;
+          events.onStats?.({ fps: Math.round(statsFrames * 1000 / elapsed), frameMs: statsFrameTotal / statsFrames,
+            worstMs: statsFrameWorst, calls: info.render.calls, triangles: info.render.triangles,
+            geometries: info.memory.geometries, textures: info.memory.textures,
+            width: canvas.width, height: canvas.height, pixelRatio: renderer.getPixelRatio(), floor, peers: peers.size });
+          statsStart = now; statsFrames = 0; statsFrameTotal = 0; statsFrameWorst = 0;
+        }
+      }
     }
   });
   function disposeObject(object) {
     object.traverse(o => {
-      if (o.geometry) o.geometry.dispose();
+      if (o.geometry && !o.userData.sharedGeometry) o.geometry.dispose();
       if (o.material) for (const m of (Array.isArray(o.material) ? o.material : [o.material])) { if (m.map) m.map.dispose(); /* Shared base materials disposed with the scene. */ if (m.map) m.dispose(); }
     });
   }
   return {
     lock, interact, stand, jump,
+    setStatsVisible(value) { statsVisible = value; statsStart = 0; statsFrames = 0; statsFrameTotal = 0; statsFrameWorst = 0; },
     sitAtSlot(id) {
       const s = layout.seats.find(item => item.machineId === id);
       if (!s || disposed) return;
+      clearInput(); unlock(); skipLockedMove = true; canvas.focus({ preventScroll: true });
       seat = s; floor = 2; jumpHeight = 0; jumpVelocity = 0;
       pos.set(s.x, layout.upperFloor, s.z); yaw = s.yaw; pitch = -0.34;
       poseRevision += 1; events.onSeat(s.id);
@@ -417,6 +476,7 @@ export default function createScene(host, events) {
     sitAtBlackjack() {
       const s = layout.seats.find(item => item.kind === 'blackjack');
       if (!s || disposed) return;
+      clearInput(); unlock(); skipLockedMove = true; canvas.focus({ preventScroll: true });
       seat = s; floor = 2; jumpHeight = 0; jumpVelocity = 0;
       pos.set(s.x, layout.upperFloor, s.z); yaw = s.yaw; pitch = -0.57;
       poseRevision += 1; events.onSeat(s.id);

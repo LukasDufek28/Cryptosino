@@ -80,3 +80,20 @@ export function drawSlotSymbol(c,symbol,x,y,size,{highlight=false,amber=false}={
   c.shadowColor=highlight?'#ffd65a':'rgba(0,0,0,.38)'; c.shadowBlur=highlight?22:9; c.shadowOffsetY=5;
   c.drawImage(img,-size/2,-size/2,size,size); c.restore();
 }
+
+// Reel motion reuses the exact artwork and shadow at the same size each frame.
+// Rendering those once avoids dozens of canvas shadow filters per display tick.
+const renderedSymbolCache = new Map();
+let renderedSymbolRevision = -1;
+export function drawCachedSlotSymbol(c,symbol,x,y,size,options={}){
+  if(renderedSymbolRevision!==amberRevision){renderedSymbolCache.clear();renderedSymbolRevision=amberRevision;}
+  const key=`${symbol}:${Math.round(size*100)}:${Boolean(options.highlight)}:${Boolean(options.amber)}`;
+  let art=renderedSymbolCache.get(key);
+  if(!art){
+    const padding=100,extent=Math.ceil(size+padding);
+    art=document.createElement('canvas');art.width=extent;art.height=extent;
+    drawSlotSymbol(art.getContext('2d'),symbol,extent/2,extent/2,size,options);
+    renderedSymbolCache.set(key,art);
+  }
+  c.drawImage(art,x-art.width/2,y-art.height/2);
+}

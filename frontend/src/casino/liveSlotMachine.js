@@ -2,8 +2,9 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import configs from '../slots/config.json';
 import { group, stool } from './models';
-import { drawSlotSymbol, slotArtRevision } from './slotSymbolArt';
+import { drawSlotSymbol, drawCachedSlotSymbol, slotArtRevision } from './slotSymbolArt';
 import { slotButton, slotSpinStart, slotReelStop, slotCoinTick, slotWin, slotRespin, slotLock, slotCelebration } from './slotAudio';
+import { LANDING_CELL, PREVIEW_CELLS_PER_MS, reelFillerSymbol, reelTravelCells, reelStripSymbol } from './reelMotion';
 
 const GOLD = '#b09261', HOUSE_GREEN = '#365345', WALNUT = '#6d5340';
 const AMBER_GOLD='#d8a62f', AMBER_RUBY='#4c0712';
@@ -111,18 +112,29 @@ export default function liveSlotMachine(parent, machine, floorY) {
 
   const LOGICAL_W=1536, LOGICAL_H=1152, DISPLAY_SCALE=.5, ROUND_MS=2850;
   let state=null,clockAt=0,serverAt=0,hoverAction=null,pressedAction=null,pressUntil=0,lastDraw=-1,lastArtRevision=-1,wasDynamic=false;
+  const localReelSeed=Math.floor(Math.random()*2147483647);
+  let spinSeed=0,spinStartVisible=config.reels.map(reel=>reel.slice(0,3)),previewSpin=null;
   let soundSpinId=null,soundRound=-1,reelSoundMask=0,winSoundRound=-1,respinSoundRound=-1,lastCoinCents=-1,lastCoinAt=0,celebrationSpinId=null,finalCoinSpinId=null,lastFinalCoinCents=-1,lastFinalCoinAt=0;
   let ui={ bet:10, autoSpin:false, showPaytable:false, busy:false, retry:false, balance:null, message:'' };
   function update(value, serverNow){
-    const nextId=value?.spin?.id || (value?.spin?.startedAt ? `${machine.id}:${value.spin.startedAt}` : null);
-    if(nextId && nextId!==soundSpinId){ soundSpinId=nextId; soundRound=-1; reelSoundMask=0; winSoundRound=-1; respinSoundRound=-1; lastCoinCents=-1; slotSpinStart(); }
-    state=value; clockAt=performance.now(); serverAt=serverNow; lastDraw=-1;
+    const nextId=value?.preview?.id || value?.spin?.id || (value?.spin?.startedAt ? `${machine.id}:${value.spin.startedAt}` : null);
+    if(nextId && nextId!==soundSpinId){
+      spinStartVisible=state?.spin?.rounds?.at(-1)?.visible||state?.spin?.visible||spinStartVisible;
+      spinSeed=String(nextId).split('').reduce((hash,char)=>(Math.imul(hash,31)+char.charCodeAt(0))|0,localReelSeed);
+      soundSpinId=nextId; soundRound=-1; reelSoundMask=0; winSoundRound=-1; respinSoundRound=-1; lastCoinCents=-1; slotSpinStart();
+    }
+    if(!nextId&&state?.preview) soundSpinId=null;
+    state=value;
+    previewSpin=value?.preview&&!value?.spin ? { id:value.preview.id,startedAt:value.preview.startedAt,durationMs:60000,
+      visible:spinStartVisible,bet:Number(value.preview.bet)||Number(ui.bet),balanceBefore:Number(ui.balance),totalPayout:0 } : null;
+    clockAt=performance.now(); serverAt=serverNow; lastDraw=-1;
   }
   function updateControls(value){ ui={...ui,...value}; lastDraw=-1; }
   function setHover(action){ hoverAction=action||null; }
   function press(action){ slotButton(action); pressedAction=action; pressUntil=performance.now()+120; }
   const clamp01=value=>Math.max(0,Math.min(1,value));
   const payoutOf=round=>Number(round?.roundPayout ?? (round?.wins||[]).reduce((sum,win)=>sum+Number(win.payout||0),0));
+  const currentSpin=()=>state?.spin||previewSpin;
   function drawGoldFrame(c,x,y,w,h,strong=false,pulse=1){
     c.save();
     c.globalAlpha=.80+.20*pulse;
@@ -220,12 +232,13 @@ export default function liveSlotMachine(parent, machine, floorY) {
     c.restore();
   }
   function drawScreen(now){
-    const c=screen.ctx,w=LOGICAL_W,h=LOGICAL_H,spin=state?.spin;
+    const c=screen.ctx,w=LOGICAL_W,h=LOGICAL_H,spin=currentSpin(),previewOnly=Boolean(state?.preview&&!state?.spin);
     c.setTransform(DISPLAY_SCALE,0,0,DISPLAY_SCALE,0,0);
     const presentationOffsetMs=Number(state?.presentationOffsetMs||0);
     const effectiveNow=serverAt+now-clockAt+presentationOffsetMs;
-    const elapsed=spin?Math.max(0,effectiveNow-spin.startedAt):Infinity;
-    const postElapsed=spin?effectiveNow-(spin.startedAt+spin.durationMs):Infinity;
+    const presentationStartedAt=state?.presentationStartedAt??spin?.startedAt;
+    const elapsed=spin?Math.max(0,effectiveNow-presentationStartedAt):Infinity;
+    const postElapsed=spin?effectiveNow-(presentationStartedAt+spin.durationMs):Infinity;
     const animating=Boolean(spin&&elapsed<spin.durationMs);
     const rounds=spin?.rounds?.length?spin.rounds:spin?[{visible:spin.visible,wins:spin.wins,roundPayout:spin.totalPayout,heldCells:[],lockedCells:[],newlyLocked:[]}]:[];
     const ri=rounds.length?(animating?Math.min(rounds.length-1,Math.floor(elapsed/ROUND_MS)):rounds.length-1):0;
@@ -241,7 +254,7 @@ export default function liveSlotMachine(parent, machine, floorY) {
     const counted=targetCents?Math.min(targetCents,Math.floor(targetCents*countProgress))/100:0;
     const paidBefore=rounds.slice(0,ri).reduce((sum,item)=>sum+payoutOf(item),0);
     const displayedReturn=spin?(animating?paidBefore+(winPhase?counted:0):Number(spin.totalPayout||0)):0;
-    if(animating){
+    if(animating&&!previewOnly){
       if(soundRound!==ri){soundRound=ri;reelSoundMask=0;lastCoinCents=-1;if(ri>0){slotLock();slotRespin();slotSpinStart();}}
       for(let r=0;r<config.reels.length;r++){const stopAt=980+r*155,bit=1<<r;if(rt>=stopAt&&!(reelSoundMask&bit)){reelSoundMask|=bit;slotReelStop(r);}}
       if(winPhase&&winSoundRound!==ri){winSoundRound=ri;slotWin(Number(roundPayout||0)/Math.max(.01,Number(spin.bet||1)));}
@@ -266,7 +279,7 @@ export default function liveSlotMachine(parent, machine, floorY) {
     c.fillStyle='#160306';c.fillRect(gx-18,gy-18,gw+36,gh+36);
     c.strokeStyle='#e0ac39';c.lineWidth=10;c.shadowColor='#a96000';c.shadowBlur=15;c.strokeRect(gx-16,gy-16,gw+32,gh+32);c.shadowBlur=0;
     for(let r=0;r<reels;r++){
-      const rx=gx+r*cw,stopAt=980+r*155,reelRolling=animating&&rt<stopAt;
+      const rx=gx+r*cw,stopAt=980+r*155,reelRolling=previewOnly||(animating&&rt<stopAt);
       c.save();c.beginPath();c.rect(rx,gy,cw,gh);c.clip();
       for(let row=0;row<3;row++){
         const yy=gy+row*ch;
@@ -274,7 +287,25 @@ export default function liveSlotMachine(parent, machine, floorY) {
         cell.addColorStop(0,'#4b0b13');cell.addColorStop(.65,'#260409');cell.addColorStop(1,'#120205');
         c.fillStyle=cell;c.fillRect(rx+2,yy+2,cw-4,ch-4);
       }
-      if(reelRolling){
+      if(reelRolling&&isJoker){
+        const previewStart=state?.preview?.startedAt;
+        const revealStart=state?.presentationStartedAt;
+        const startTravel=!previewOnly&&ri===0&&Number.isFinite(previewStart)&&Number.isFinite(revealStart)
+          ? Math.max(0,revealStart-previewStart)*PREVIEW_CELLS_PER_MS : 0;
+        const landingCell=startTravel?Math.ceil(startTravel)+LANDING_CELL:LANDING_CELL;
+        const travel=previewOnly ? Math.max(0,effectiveNow-previewStart)*PREVIEW_CELLS_PER_MS
+          : startTravel&&ri===0 ? startTravel+(landingCell-startTravel)*reelTravelCells(rt,stopAt)/LANDING_CELL
+          : reelTravelCells(rt,stopAt);
+        const first=Math.floor(travel)-1;
+        const start=ri>0?rounds[ri-1]?.visible?.[r]:spinStartVisible[r];
+        const seed=spinSeed+ri*37+r*101;
+        for(let index=first;index<=first+5;index++){
+          const sym=previewOnly ? reelFillerSymbol(config.reels[r],start,index,seed)
+            : reelStripSymbol(config.reels[r],start,visible?.[r],index,seed,landingCell);
+          drawCachedSlotSymbol(c,sym,rx+cw/2,gy+(index-travel+.5)*ch,cw*.70,{amber:true});
+        }
+        const blur=c.createLinearGradient(0,gy,0,gy+gh);blur.addColorStop(0,'rgba(255,205,90,.10)');blur.addColorStop(.5,'rgba(255,255,255,0)');blur.addColorStop(1,'rgba(255,205,90,.10)');c.fillStyle=blur;c.fillRect(rx,gy,cw,gh);
+      }else if(reelRolling){
         const speed=3.55,slowStart=Math.max(0,stopAt-260),t=rt<=slowStart?0:Math.min(1,(rt-slowStart)/260);
         const travel=(rt<=slowStart?rt*speed:slowStart*speed+speed*260*(t-.5*t*t))+r*91;
         const off=travel%ch,base=Math.floor(travel/ch);
@@ -282,7 +313,7 @@ export default function liveSlotMachine(parent, machine, floorY) {
         for(let k=-1;k<=3;k++){const sym=config.reels[r][(base+k+r*3)%config.reels[r].length];drawSlotSymbol(c,sym,rx+cw/2,gy+(k+1)*ch-off,cw*.67,{amber:isJoker});}
         const blur=c.createLinearGradient(0,gy,0,gy+gh);blur.addColorStop(0,'rgba(255,205,90,.10)');blur.addColorStop(.5,'rgba(255,255,255,0)');blur.addColorStop(1,'rgba(255,205,90,.10)');c.fillStyle=blur;c.fillRect(rx,gy,cw,gh);
       }else{
-        const settle=Math.max(0,rt-stopAt),settleP=Math.min(1,settle/220),bounce=settle<220?(1-settleP)*22:0;
+        const settle=Math.max(0,rt-stopAt),settleP=Math.min(1,settle/220),bounce=isJoker?0:settle<220?(1-settleP)*22:0;
         for(let row=0;row<3;row++){
           const sym=visible?.[r]?.[row]||config.reels[r][row];
           drawSlotSymbol(c,sym,rx+cw/2,gy+(row+.5)*ch+bounce,cw*.70,{highlight:winPhase&&winCells.has(`${r}:${row}`),amber:isJoker});
@@ -339,11 +370,12 @@ export default function liveSlotMachine(parent, machine, floorY) {
   }
 
   function frame(now){
-    const spin=state?.spin;
+    const spin=currentSpin();
     const offset=Number(state?.presentationOffsetMs||0);
     const effectiveNow=serverAt+now-clockAt+offset;
-    const animated=Boolean(spin&&effectiveNow<spin.startedAt+spin.durationMs);
-    const postElapsed=spin?effectiveNow-(spin.startedAt+spin.durationMs):Infinity;
+    const presentationStartedAt=state?.presentationStartedAt??spin?.startedAt;
+    const animated=Boolean(spin&&effectiveNow<presentationStartedAt+spin.durationMs);
+    const postElapsed=spin?effectiveNow-(presentationStartedAt+spin.durationMs):Infinity;
     const multiple=spin?Number(spin.totalPayout||0)/Math.max(.01,Number(spin.bet||1)):0;
     const postWin=Boolean(spin&&!animated&&Number(spin.totalPayout)>0&&postElapsed>=0&&postElapsed<celebrationDuration(multiple));
     if(postWin&&celebrationSpinId!==spin.id){
@@ -362,7 +394,7 @@ export default function liveSlotMachine(parent, machine, floorY) {
     const artRev=slotArtRevision();
     const dynamic=animated||postWin;
     const clearDynamic=wasDynamic&&!dynamic;
-    if(lastDraw<0||artRev!==lastArtRevision||(dynamic&&now-lastDraw>=16)||clearDynamic){
+    if(lastDraw<0||artRev!==lastArtRevision||(dynamic&&((isJoker&&animated)||now-lastDraw>=16))||clearDynamic){
       drawScreen(now);lastDraw=now;lastArtRevision=artRev;
     }
     wasDynamic=dynamic;
@@ -386,5 +418,5 @@ export default function liveSlotMachine(parent, machine, floorY) {
     if(now>=pressUntil)pressedAction=null;
   }
   drawScreen(performance.now());
-  return { id:machine.id, controls, update, frame, setHover, press, updateControls };
+  return { id:machine.id, group:g, controls, update, frame, setHover, press, updateControls };
 }

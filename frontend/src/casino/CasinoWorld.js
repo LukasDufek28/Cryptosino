@@ -79,6 +79,8 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
   const [status, setStatus] = useState({ floor: 2, x: layout.spawn.x, z: layout.spawn.z, yaw: layout.spawn.yaw, prompt: '', locked: false });
   const [activeGame, setActiveGame] = useState(null);
   const [showMap, setShowMap] = useState(true);
+  const [showStats, setShowStats] = useState(false);
+  const [stats, setStats] = useState(null);
   const [receptionMessage, setReceptionMessage] = useState('');
   const [chatOpen, setChatOpen] = useState(false);
   const [chatText, setChatText] = useState('');
@@ -126,7 +128,10 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
   useEffect(() => {
     let instance;
     try {
-      instance = createScene(host.current, { onGame: game => openGameRef.current(game), onSlot: id => openSlotRef.current?.(id), onResetBalance: () => resetBalanceRef.current(), onStatus: setStatus, onSeat: setSeat, onError: setError });
+      instance = createScene(host.current, { onGame: game => openGameRef.current(game), onSlot: id => openSlotRef.current?.(id), onResetBalance: () => resetBalanceRef.current(), onStatus: next => setStatus(previous =>
+        previous.floor === next.floor && previous.prompt === next.prompt && previous.locked === next.locked &&
+        Math.abs(previous.x - next.x) < 0.15 && Math.abs(previous.z - next.z) < 0.15 && Math.abs(previous.yaw - next.yaw) < 0.05 ? previous : next
+      ), onSeat: id => { setSeat(id); blackjackRef.current?.onSeatChange?.(id); }, onStats: setStats, onError: setError });
       sceneRef.current = instance; setReady(true);
     } catch {
       setError('The 3D room could not start. Enable hardware acceleration and use a browser with WebGL 2 support.');
@@ -143,6 +148,16 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
   // Signing out also closes any retained authenticated game screen.
   useEffect(() => { if (!token && !LOCAL_DEMO) setPanel(current => ['game', 'trading'].includes(current) ? null : current); }, [token]);
   useEffect(() => { sceneRef.current?.setEnabled(!welcome && !panel && !chatOpen && !error); }, [welcome, panel, chatOpen, error, ready]);
+  useEffect(() => { sceneRef.current?.setStatsVisible(showStats); if (!showStats) setStats(null); }, [showStats, ready]);
+  useEffect(() => {
+    const toggleStats = event => {
+      if (event.code !== 'KeyI' || event.repeat || event.ctrlKey || event.metaKey || event.altKey ||
+          event.target.isContentEditable || /INPUT|TEXTAREA|SELECT/.test(event.target.tagName)) return;
+      event.preventDefault(); setShowStats(value => !value);
+    };
+    document.addEventListener('keydown', toggleStats);
+    return () => document.removeEventListener('keydown', toggleStats);
+  }, []);
   useEffect(() => {
     const openChat = event => {
       if (event.code !== 'KeyT' || event.ctrlKey || event.metaKey || event.altKey || welcome || panel || chatOpen || error ||
@@ -171,28 +186,43 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
       </nav>
     </header>
     <div className="amber-location"><span className="amber-live-dot"/><span>{presence.mode === 'shared' ? `${presence.count} guests · ${presence.role === 'host' ? 'You are hosting' : 'Browser hosted'} · 30 ms send interval` : 'Your evening, your pace'}</span><span className="amber-location-divider">/</span><span>GOLDEN HOUR</span></div>
+    {showStats && <aside className="amber-debug-stats" aria-label="Performance statistics">
+      <strong>PERFORMANCE <kbd>I</kbd></strong>
+      {stats ? <>
+        <div><span>FPS</span><b>{stats.fps}</b></div>
+        <div><span>Frame CPU</span><b>{stats.frameMs.toFixed(1)} ms avg · {stats.worstMs.toFixed(1)} worst</b></div>
+        <div><span>Draw calls</span><b>{stats.calls}</b></div>
+        <div><span>Triangles</span><b>{stats.triangles.toLocaleString()}</b></div>
+        <div><span>GPU resources</span><b>{stats.geometries} geo · {stats.textures} tex</b></div>
+        <div><span>Resolution</span><b>{stats.width} × {stats.height} · {stats.pixelRatio.toFixed(1)}×</b></div>
+        <div><span>Scene</span><b>Floor {stats.floor} · {stats.peers} guests</b></div>
+      </> : <span>Collecting one second of frames…</span>}
+      <small>Frame CPU excludes browser compositing and GPU wait. Record FPS in the same location before comparing.</small>
+    </aside>}
 
     {welcome && !error && <section className="amber-welcome">
-      <div className="amber-eyebrow"><span/> EST. 2026 · AN EVENING WELL SPENT</div>
-      <h1>A little luck.<br/>A lovely evening.</h1>
-      <p>Leave the city behind. Find your favorite table,<br className="amber-desktop"/> settle into the lounge, and stay a little longer.</p>
-      <button className="amber-enter" onClick={start} disabled={!ready}>{ready ? 'Make yourself at home' : 'Opening the doors…'} <span>↗</span></button>
-      <div className="amber-welcome-foot"><span>02 FLOORS</span><i/><span>04 GAMES</span><i/><span>ONE GOOD EVENING</span></div>
+      <div className="amber-welcome-crest" aria-hidden="true"><span>A</span><span>H</span></div>
+      <div className="amber-eyebrow">EST. 2026 <span className="amber-welcome-dot">✦</span> OPEN FOR AN EVENING</div>
+      <h1>Your evening<br/><em>begins here.</em></h1>
+      <button className="amber-enter" onClick={start} disabled={!ready}>
+        <span>{ready ? 'Enter The Amber House' : 'Opening the doors…'}</span>
+        <span className="amber-enter-light" aria-hidden="true" />
+      </button>
     </section>}
 
     {!welcome && !panel && !error && <>
-      <div className="amber-reticle" aria-hidden="true">·</div>
+      {!blackjack.active && <div className="amber-reticle" aria-hidden="true">·</div>}
       <div className="amber-floor-label"><span>0{status.floor}</span><div><small>{status.floor === 2 ? 'UPSTAIRS' : 'GROUND FLOOR'}</small><strong>{status.floor === 2 ? 'The casino & lounge' : 'The welcome hall'}</strong></div></div>
       {status.prompt && <button className="amber-interact" onClick={() => sceneRef.current?.interact()}><kbd>E</kbd>{status.prompt}<span>↗</span></button>}
       {seat && !slots.selected && !blackjack.active && <div className="amber-seated">Take your time. Watch the city go by.</div>}
-      {!status.locked && <button className="amber-resume" onClick={() => sceneRef.current?.lock()}>Click the scene to look around · or drag</button>}
-      <div className="amber-mobile-controls" aria-label="Movement controls">
+      {!status.locked && !blackjack.active && <button className="amber-resume" onClick={() => sceneRef.current?.lock()}>Click the scene to look around · or drag</button>}
+      {!blackjack.active && <div className="amber-mobile-controls" aria-label="Movement controls">
         {[[0, 1, '↑'], [-1, 0, '←'], [0, -1, '↓'], [1, 0, '→']].map(([x, y, label]) => <button key={label} aria-label={`Move ${label}`} onPointerDown={e => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); sceneRef.current?.move(x, y); }} onPointerUp={() => sceneRef.current?.move(0, 0)} onPointerCancel={() => sceneRef.current?.move(0, 0)} onLostPointerCapture={() => sceneRef.current?.move(0, 0)}>{label}</button>)}
-      </div>
+      </div>}
     </>}
 
     <footer className="amber-bottom">
-      <div className="amber-instructions"><span><kbd>W A S D</kbd> Move</span><span><kbd>MOUSE</kbd> Look</span><span><kbd>SPACE</kbd> Jump</span><span><kbd>E</kbd> Interact</span><span><kbd>T</kbd> Chat</span><span><kbd>R</kbd> Reset position</span><span><kbd>ESC</kbd> Cursor</span></div>
+      <div className="amber-instructions">{blackjack.active ? <><span><kbd>MOUSE</kbd> Select</span><span><kbd>E</kbd> Leave table</span><span><kbd>I</kbd> Stats</span></> : <><span><kbd>W A S D</kbd> Move</span><span><kbd>MOUSE</kbd> Look</span><span><kbd>SPACE</kbd> Jump</span><span><kbd>E</kbd> Interact</span><span><kbd>T</kbd> Chat</span><span><kbd>R</kbd> Reset position</span><span><kbd>I</kbd> Stats</span><span><kbd>ESC</kbd> Cursor</span></>}</div>
       <button className="amber-reset" onClick={() => sceneRef.current?.home()} title="Return upstairs (R)">Return upstairs ↗</button>
     </footer>
     {showMap && !panel && <MiniMap status={status} />}
@@ -213,7 +243,7 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
     {panel === 'directory' && <Dialog title="The collection" onClose={closePanel}>
       <p className="amber-modal-intro">Four ways to make an evening. Find a station upstairs, or take a seat right here.</p>
       <div className="amber-directory">{layout.stations.map((s, i) => <button key={s.id} onClick={() => openGameRef.current(s.game)} style={{ '--station-color': s.color }}><span className="amber-game-number">0{i + 1}</span><span><strong>{s.name}</strong><small>{s.description}</small></span><span>↗</span></button>)}</div>
-      <p className="amber-caption">For synthetic trading, leave through reception and enter Amber Exchange next door: on your right when facing the casino from the street. Press E at a trading terminal.</p>
+      <p className="amber-caption">For market-referenced trading, leave through reception and enter Amber Exchange next door: on your right when facing the casino from the street. Press E at a trading terminal.</p>
     </Dialog>}
     {panel === 'auth' && <Dialog title="Welcome to the house" onClose={closePanel}>
       <AuthPage onAuth={(u, t) => { onAuth(u, t); setPanel(activeGame === 'trading' ? 'trading' : activeGame ? 'game' : null); }} />

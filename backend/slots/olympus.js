@@ -195,8 +195,12 @@ function spinOlympusRound({ config, wager, serverSeed, seed, nonce }) {
   }
   const finalRound = allRounds.at(-1);
   if (finalRound) finalRound.finalTotalPayout = Number(totalPayout.toFixed(2));
-  const durationMs = Math.min(60000, Math.max(3200,
-    allRounds.length * Number(config.roundDurationMs || 1350) + 600));
+  const durationMs = Math.min(60000, Math.max(Number(config.minimumSpinDurationMs || 450),
+    allRounds.reduce((duration, round) => duration + (round.wins.length
+      ? Number(config.roundDurationMs || 2000)
+      : round.sequencePayout > 0 || round.scatterPayout > 0
+        ? Number(config.payoutRoundDurationMs || 850)
+        : Number(config.noWinRoundDurationMs || 180)), 0) + Number(config.spinSettleMs || 150)));
 
   return {
     stops: [],

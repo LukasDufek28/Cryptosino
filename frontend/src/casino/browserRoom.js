@@ -71,6 +71,10 @@ function cleanPose(p) {
     y: (seat ? layout.upperFloor : baseY) + (seat ? 0 : p.jumpHeight),
     floor: p.floor, jumpHeight: p.jumpHeight, faceSeed: p.faceSeed, seatId: p.seatId, revision: p.revision };
 }
+export const poseSignature = p => [
+  Math.round(p.x * 1000), Math.round(p.z * 1000), Math.round(p.yaw * 1000),
+  Math.round(p.jumpHeight * 1000), p.floor, p.seatId, p.faceSeed, p.revision
+].join(':');
 
 export default function browserRoom(token, scene, onStatus) {
   const sessionId = window.crypto.randomUUID();
@@ -83,6 +87,7 @@ export default function browserRoom(token, scene, onStatus) {
   let iceServers = [], relayConfigured = false, lastStatus = '', errorMessage = '';
   let worldAnchor = 0, worldAt = performance.now(), worldReady = false;
   let lastSnapshot = 0, lastUI = 0, lastEventRevision = -1;
+  let lastPoseKey = '', lastPoseSent = 0, lastBroadcast = 0, posesChanged = true;
   let lastChatAt = 0;
   let slotServerOffset = 0;
   const isHost = () => host === sessionId;
@@ -110,14 +115,14 @@ export default function browserRoom(token, scene, onStatus) {
   function closeLink(id) {
     const link = links.get(id);
     if (!link) return;
-    links.delete(id); states.delete(id);
+    links.delete(id); states.delete(id); posesChanged = true;
     outbox = outbox.filter(message => message.to !== id);
     link.cancelGather?.();
     link.pc.close();
   }
   function disconnect() {
     for (const id of [...links.keys()]) closeLink(id);
-    states.clear(); outbox = []; lastSnapshot = 0;
+    states.clear(); outbox = []; lastSnapshot = 0; lastPoseKey = ''; posesChanged = true;
     scene.updatePeers([]); scene.setWorldClock(null);
   }
   function send(channel, packet) {
@@ -163,12 +168,17 @@ export default function browserRoom(token, scene, onStatus) {
       const occupant = roster.get(state.sessionId);
       const spinMember = [...roster.values()].find(member => member.id === state.spin?.userId);
       const spin = spinMember ? cleanSlotSpin(state.spin, spinMember, machine) : null;
+      const preview = typeof state.preview?.id === 'string' && state.preview.id.length <= 100 &&
+        Number.isFinite(state.preview.startedAt) ? { id: state.preview.id, startedAt: state.preview.startedAt,
+          ownerSessionId: typeof state.preview.ownerSessionId === 'string' ? state.preview.ownerSessionId : null,
+          bet: Number.isFinite(Number(state.preview.bet)) ? Number(state.preview.bet) : 0 } : null;
       const presentationOffsetMs = spin && Number.isFinite(Number(state.presentationOffsetMs))
         ? Math.max(0, Math.min(Number(state.presentationOffsetMs), Math.max(0, spin.durationMs - 250))) : 0;
       slotMachines.set(machine.id, { id: machine.id,
         ...(occupant && occupant.id === state.userId && occupant.username === state.username
           ? { sessionId: state.sessionId, userId: occupant.id, username: occupant.username } : {}),
-        spin, presentationOffsetMs });
+        spin, preview, presentationStartedAt: spin && Number.isFinite(state.presentationStartedAt) ? state.presentationStartedAt : null,
+        presentationOffsetMs });
     }
     scene.receiveSlotState(slotState()); status();
   }
@@ -184,7 +194,9 @@ export default function browserRoom(token, scene, onStatus) {
     let changed = false;
     for (const [id, state] of slotMachines) {
       if (state.sessionId && !roster.has(state.sessionId)) {
-        slotMachines.set(id, { id, spin: state.spin || null, presentationOffsetMs: state.presentationOffsetMs || 0 }); changed = true;
+        slotMachines.set(id, { id, spin: state.spin || null,
+          preview: state.preview && roster.has(state.preview.ownerSessionId) ? state.preview : null,
+          presentationStartedAt: state.presentationStartedAt || null, presentationOffsetMs: state.presentationOffsetMs || 0 }); changed = true;
       }
     }
     if (changed) publishSlotState();
@@ -198,18 +210,37 @@ export default function browserRoom(token, scene, onStatus) {
     const current = slotMachines.get(machine.id);
     if (packet.action === 'claim') {
       if (current?.sessionId && current.sessionId !== sender) return { ok: false, error: 'Someone is already using this machine.' };
+      if (current?.preview && !current.spin && current.preview.ownerSessionId !== sender) return { ok: false, error: 'This machine is finishing a spin.' };
       if ([...slotMachines.values()].some(state => state.id !== machine.id && state.sessionId === sender)) return { ok: false, error: 'Stand up from your other machine first.' };
       slotMachines.set(machine.id, { id: machine.id, userId: member.id, username: member.username, sessionId: sender,
-        spin: current?.spin || null, presentationOffsetMs: current?.presentationOffsetMs || 0 });
+        spin: current?.spin || null, preview: current?.preview || null,
+        presentationStartedAt: current?.presentationStartedAt || null, presentationOffsetMs: current?.presentationOffsetMs || 0 });
     } else if (packet.action === 'release') {
       if (current?.sessionId === sender) slotMachines.set(machine.id, { id: machine.id, spin: current.spin || null,
+        preview: current.preview || null, presentationStartedAt: current.presentationStartedAt || null,
         presentationOffsetMs: current.presentationOffsetMs || 0 });
-    } else if (packet.action === 'spin') {
+    } else if (packet.action === 'start') {
       if (current?.sessionId !== sender) return { ok: false, error: 'Sit at this machine again before spinning.' };
+      if (typeof packet.previewId !== 'string' || !packet.previewId || packet.previewId.length > 100) return { ok: false, error: 'Invalid spin start.' };
+      if (!Number.isFinite(Number(packet.bet)) || Number(packet.bet) < 0.1 || Number(packet.bet) > 1000000) return { ok: false, error: 'Invalid shared stake.' };
+      if (current.preview?.id === packet.previewId) return { ok: true, state: slotState() };
+      if (current.preview && !current.spin) return { ok: false, error: 'This machine is already spinning.' };
+      slotMachines.set(machine.id, { ...current, spin: null, preview: { id: packet.previewId, startedAt: Date.now() + slotServerOffset, ownerSessionId: sender, bet: Number(packet.bet) },
+        presentationStartedAt: null, presentationOffsetMs: 0 });
+    } else if (packet.action === 'cancel') {
+      if (current?.preview?.ownerSessionId !== sender || current.preview.id !== packet.previewId) return { ok: false, error: 'Spin start is no longer active.' };
+      slotMachines.set(machine.id, { ...current, preview: null });
+    } else if (packet.action === 'spin') {
+      if (current?.sessionId !== sender && !(current?.sessionId == null && current?.preview?.ownerSessionId === sender))
+        return { ok: false, error: 'Sit at this machine again before spinning.' };
       const spin = cleanSlotSpin(packet.spin, member, machine);
       if (!spin) return { ok: false, error: 'Invalid shared spin result.' };
+      if (current.preview && current.preview.id !== packet.previewId) return { ok: false, error: 'Spin start does not match this result.' };
+      const oldOffset = slotServerOffset;
       if (Number.isFinite(packet.serverNow)) slotServerOffset = packet.serverNow - Date.now();
-      slotMachines.set(machine.id, { ...current, spin, presentationOffsetMs: 0 });
+      const preview = current.preview && { ...current.preview, startedAt: current.preview.startedAt + slotServerOffset - oldOffset };
+      slotMachines.set(machine.id, { ...current, spin, preview,
+        presentationStartedAt: Date.now() + slotServerOffset, presentationOffsetMs: 0 });
     } else if (packet.action === 'hurry') {
       if (current?.sessionId !== sender || !current?.spin) return { ok: false, error: 'No active spin to speed up.' };
       const serverNow = Date.now() + slotServerOffset;
@@ -249,7 +280,9 @@ export default function browserRoom(token, scene, onStatus) {
       // Do not move the guest's camera. Exclude the rejected seated pose until it stands.
       return;
     }
-    states.set(id, { pose, seq, at: performance.now() });
+    const key = poseSignature(pose);
+    if (key !== previous?.key) posesChanged = true;
+    states.set(id, { pose, key, seq, at: performance.now() });
   }
   function players() {
     return [...states.entries()].filter(([id]) => roster.has(id)).map(([id, state]) => ({
@@ -334,7 +367,7 @@ export default function browserRoom(token, scene, onStatus) {
     if (!['movement', 'events'].includes(channel.label) || link[channel.label]) { channel.close(); return; }
     link[channel.label] = channel;
     channel.onmessage = e => receive(link, e.data);
-    channel.onopen = () => { lastEventRevision = -1; if (isHost() && channel.label === 'events') { publishSlotState(link.id); publishBlackjackVisual(link.id); } };
+    channel.onopen = () => { lastEventRevision = -1; lastPoseKey = ''; posesChanged = true; if (isHost() && channel.label === 'events') { publishSlotState(link.id); publishBlackjackVisual(link.id); } };
   }
   function newLink(id, connection) {
     closeLink(id);
@@ -449,15 +482,28 @@ export default function browserRoom(token, scene, onStatus) {
     }
     const now = performance.now(), pose = scene.pose(), seq = ++packetSeq;
     if (isHost()) {
-      for (const [id, state] of states) if (id !== sessionId && now - state.at > 3000) states.delete(id);
+      let expiredPreview = false;
+      for (const [id, state] of slotMachines) {
+        if (state.preview && !state.spin && Date.now() + slotServerOffset - state.preview.startedAt > 12000) {
+          slotMachines.set(id, { ...state, preview: null }); expiredPreview = true;
+        }
+      }
+      if (expiredPreview) publishSlotState();
+      for (const [id, state] of states) if (id !== sessionId && now - state.at > 3000) { states.delete(id); posesChanged = true; }
       acceptPose(sessionId, pose, seq);
-      const all = players();
-      scene.updatePeers(all.filter(p => p.id !== selfId));
-      const packet = { type: 'snapshot', generation, seq, players: all, worldSeconds: worldSeconds() };
-      for (const link of links.values()) send(link.movement, packet);
+      if (posesChanged || now - lastBroadcast >= 1000) {
+        const all = players();
+        scene.updatePeers(all.filter(p => p.id !== selfId));
+        const packet = { type: 'snapshot', generation, seq, players: all, worldSeconds: worldSeconds() };
+        for (const link of links.values()) send(link.movement, packet);
+        posesChanged = false; lastBroadcast = now;
+      }
     } else {
       const link = links.get(host);
-      send(link?.movement, { type: 'pose', generation, seq, pose });
+      const key = poseSignature(pose);
+      if (key !== lastPoseKey || now - lastPoseSent >= 1000) {
+        if (send(link?.movement, { type: 'pose', generation, seq, pose })) { lastPoseKey = key; lastPoseSent = now; }
+      }
       // Discrete changes also go reliably: seat/stand, face, reset, jump.
       if (pose.revision !== lastEventRevision && send(link?.events, { type: 'event', generation, seq, pose })) lastEventRevision = pose.revision;
       if (lastSnapshot && now - lastSnapshot > 3000) { scene.updatePeers([]); lastSnapshot = 0; }

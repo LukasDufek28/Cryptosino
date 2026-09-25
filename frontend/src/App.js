@@ -9,10 +9,21 @@ import AuthPage from './AuthPage';
 import NavBar from './NavBar';
 import './NavBar.css';
 import './MainPage.css';
+import './casino/EntryScreen.css';
 
 const API_URL = process.env.REACT_APP_API_URL || '';
 const CasinoWorld = lazy(() => import('./casino/CasinoWorld'));
-const worldLoading = <div style={{ padding: 40, background: '#293e32', color: '#f1d5a0', minHeight: '100vh' }}>Opening The Amber House…</div>;
+const worldLoading = <div className="amber-loading" role="status" aria-live="polite">
+  <div className="amber-loading-glow" aria-hidden="true" />
+  <div className="amber-loading-inner">
+    <div className="amber-loading-emblem" aria-hidden="true"><span>A</span><span>H</span></div>
+    <div className="amber-loading-rule" />
+    <span className="amber-loading-kicker">A CRYPTOSINO ADDRESS</span>
+    <h1>The Amber House</h1>
+    <p>Preparing your evening</p>
+    <div className="amber-loading-track" aria-hidden="true"><span /></div>
+  </div>
+</div>;
 
 function MainPage({ balance, token, setBalance }) {
   const [pingTime, setPingTime] = useState(null);

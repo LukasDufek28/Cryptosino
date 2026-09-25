@@ -102,17 +102,32 @@ export default function useBlackjackTable(sceneRef,ready,token,setBalance,balanc
       finish(next,Number(payout.toFixed(2)),true,dealerResolutionDelay(dealerHand));
     };
     const setBusy=value=>{busy=value;publish();};
+    const resetCompletedRound=()=>{
+      if(phase!=='finished')return;
+      phase='betting';bet=0;wager=0;betId=null;roundId=null;
+      playerHand=[];dealerHand=[];dealerHidden=false;outcome=null;dealerCue=null;
+      roundPayout=0;roundProfit=0;message='Select chips to place your bet.';
+    };
+    const leaveTable=()=>{
+      if(!atTable)return;
+      atTable=false;setActive(false);
+      resetCompletedRound();
+      publish();
+    };
 
     actions.current={
+      leave:leaveTable,
       claim(){
         if(stopped||(!token&&!LOCAL_DEMO))return;
+        if(atTable&&scene.pose?.().seatId==='seat-blackjack-live')return;
+        resetCompletedRound();
         atTable=true;setActive(true);scene.sitAtBlackjack?.();
         if(phase!=='playing')cue('count',pick([
           'Welcome to Table 21.',
           'Take a seat. Let us make some questionable decisions.',
           'Amber House blackjack. The cards are feeling dramatic tonight.'
         ]),180);
-        message=phase==='playing'?'Your hand is still live.':phase==='finished'?'Place chips or deal again.':'Select chips to place your bet.';
+        message=phase==='playing'?'Your hand is still live.':'Select chips to place your bet.';
         publish();setTimeout(()=>{if(atTable&&!stopped)publish();},120);
       },
       chip(value){
@@ -234,14 +249,10 @@ export default function useBlackjackTable(sceneRef,ready,token,setBalance,balanc
       else actions.current[action]?.();
     });
     publish();
-    const tick=setInterval(()=>{
-      const seated=scene.pose?.().seatId==='seat-blackjack-live';
-      if(atTable&&!seated){atTable=false;setActive(false);publish();}
-    },180);
     return()=>{
-      stopped=true;clearInterval(tick);controllers.forEach(c=>c.abort());scene.setBlackjackAction?.(null);actions.current={};setActive(false);
+      stopped=true;controllers.forEach(c=>c.abort());scene.setBlackjackAction?.(null);actions.current={};setActive(false);
     };
   },[ready,sceneRef,token,setBalance]);
 
-  return{active,claim:()=>actions.current.claim?.()};
+  return{active,claim:()=>actions.current.claim?.(),onSeatChange:id=>{if(id!=='seat-blackjack-live')actions.current.leave?.();}};
 }

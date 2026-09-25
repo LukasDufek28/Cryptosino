@@ -11,9 +11,9 @@
     "yaw": 0.22
   },
   "stairs": {
-    "minX": -13.3,
+    "minX": -13.65,
     "maxX": -9.6,
-    "walkMinX": -12.85,
+    "walkMinX": -13.2,
     "walkMaxX": -10.05,
     "bottomZ": 7.5,
     "topZ": -3.5

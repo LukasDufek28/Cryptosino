@@ -3,6 +3,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import configs from '../slots/config.json';
 import { group, stool } from './models';
 import { drawOlympusKing, drawOlympusSymbol } from './olympusArt';
+import { LANDING_CELL, PREVIEW_CELLS_PER_MS, reelFillerSymbol, reelStripSymbol, reelTravelCells } from './reelMotion';
 import { slotButton, slotCoinTick, slotSpinStart, slotWin, olympusTumble, olympusMultiplier, olympusScatter, olympusThunder, olympusFreeSpinStart } from './slotAudio';
 
 const GOLD='#d9b657', NAVY='#17284d', MARBLE='#e9e2d3', PURPLE='#39245d';
@@ -63,13 +64,30 @@ export default function liveOlympusMachine(parent,machine,floorY){
     const b=new THREE.Mesh(new THREE.CylinderGeometry(def.r,def.r,.07,32),mat);b.position.set(def.x,.936,.79);b.rotation.x=deckAngle;b.castShadow=true;g.add(b);b.userData.slotAction=def.action;b.userData.baseY=b.position.y;b.userData.baseColor=new THREE.Color('#253459');b.userData.accent=new THREE.Color(def.accent);controls.push(b);
     const face=new THREE.Mesh(new THREE.CircleGeometry(def.r*.76,32),new THREE.MeshBasicMaterial({map:buttonFaceTexture(def.face),transparent:true,depthWrite:false,toneMapped:false}));face.position.set(def.x,.978,.79);face.rotation.x=-Math.PI/2+deckAngle;face.renderOrder=4;g.add(face);b.userData.face=face;b.userData.baseFaceY=face.position.y;
   });
-  const ROUND_MS=Number(config.roundDurationMs||1350);
+  const ROUND_MS=Number(config.roundDurationMs||2000);
+  const PAYOUT_ROUND_MS=Number(config.payoutRoundDurationMs||850);
+  const NO_WIN_ROUND_MS=Number(config.noWinRoundDurationMs||180);
+  const roundDuration=round=>round?.wins?.length?ROUND_MS:Number(round?.sequencePayout||0)>0||Number(round?.scatterPayout||0)>0?PAYOUT_ROUND_MS:NO_WIN_ROUND_MS;
+  const roundAtElapsed=(rounds,elapsed)=>{
+    let passed=0;
+    for(let i=0;i<rounds.length;i++){
+      const duration=roundDuration(rounds[i]);
+      if(elapsed<passed+duration)return{index:i,time:elapsed-passed,duration};
+      passed+=duration;
+    }
+    const index=Math.max(0,rounds.length-1),duration=roundDuration(rounds[index]);
+    return{index,time:duration,duration};
+  };
   let state=null,clockAt=0,serverAt=0,lastDraw=-1,hoverAction=null,pressedAction=null,pressUntil=0;
+  const localPreviewSeed=Math.floor(Math.random()*2147483647);
+  let spinStartVisible=IDLE_GRID;
+  let idleGrid=null;
   let ui={bet:10,autoSpin:false,showPaytable:false,busy:false,retry:false,balance:null,message:''};
   let soundSpinId=null,soundRound=-1,lastCoinCents=-1,lastCoinAt=0,freeIntroPlayed=false;
   function update(value,serverNow){
-    const nextId=value?.spin?.id||(value?.spin?.startedAt?`${machine.id}:${value.spin.startedAt}`:null);
-    if(nextId&&nextId!==soundSpinId){soundSpinId=nextId;soundRound=-1;lastCoinCents=-1;freeIntroPlayed=false;slotSpinStart();}
+    const nextId=value?.preview?.id||value?.spin?.id||(value?.spin?.startedAt?`${machine.id}:${value.spin.startedAt}`:null);
+    if(nextId&&nextId!==soundSpinId){spinStartVisible=state?.spin?.rounds?.at(-1)?.visible||state?.spin?.visible||spinStartVisible;soundSpinId=nextId;soundRound=-1;lastCoinCents=-1;freeIntroPlayed=false;slotSpinStart();}
+    if(!nextId&&state?.preview)soundSpinId=null;
     state=value;clockAt=performance.now();serverAt=Number(serverNow)||Date.now();lastDraw=-1;
   }
   function updateControls(value){ui={...ui,...value};lastDraw=-1;}
@@ -94,18 +112,59 @@ export default function liveOlympusMachine(parent,machine,floorY){
   function drawGrid(c,round,rt,now){
     const grid=round?.visible||IDLE_GRID;
     const wins=roundWinCells(round),hasWin=(round?.wins||[]).length>0;
-    const fall=rt<300?1-easeOut(rt/300):0;
-    const fade=hasWin&&rt>790?1-clamp01((rt-790)/220):1;
+    const fadeStart=ROUND_MS*.87,fade=hasWin&&rt>fadeStart?1-clamp01((rt-fadeStart)/(ROUND_MS-fadeStart)):1;
     const pulse=.5+.5*Math.sin(now*.018);
     const gx=88,gy=162,cw=164,ch=144;
     for(let reel=0;reel<6;reel++)for(let row=0;row<5;row++){
       const x=gx+reel*cw,y=gy+row*ch;
       c.fillStyle=(reel+row)%2?'rgba(33,30,79,.36)':'rgba(255,255,255,.055)';c.fillRect(x+4,y+4,cw-8,ch-8);
       const parsed=parseSymbol(grid[reel]?.[row]);const isWin=wins.has(`${reel}:${row}`),alpha=isWin?fade:1;
-      const drop=(fall*(190+reel*24+row*13));
-      drawOlympusSymbol(c,parsed.symbol,x+cw/2,y+ch/2-drop,84,{value:parsed.value,alpha,scale:isWin?1+.045*pulse:1,glow:isWin||parsed.symbol==='MULT'||parsed.symbol==='SCATTER'});
+      drawOlympusSymbol(c,parsed.symbol,x+cw/2,y+ch/2,84,{value:parsed.value,alpha,scale:isWin?1+.045*pulse:1,glow:isWin||parsed.symbol==='MULT'||parsed.symbol==='SCATTER'});
       if(isWin&&fade>.1){c.save();c.globalAlpha=.35+.45*pulse;c.strokeStyle='#fff1a0';c.lineWidth=7;c.shadowColor='#ffd64e';c.shadowBlur=18;c.strokeRect(x+9,y+9,cw-18,ch-18);c.restore();}
     }
+  }
+  function drawRollingGrid(c,elapsed,previewOnly,round,previewStartedAt,presentationStartedAt){
+    const gx=88,gy=162,cw=164,ch=144;
+    const strip=config.symbols.slice(0,9);
+    for(let reel=0;reel<6;reel++){
+      c.save();c.beginPath();c.rect(gx+reel*cw,gy,cw,5*ch);c.clip();
+      for(let row=0;row<5;row++){
+        const x=gx+reel*cw,y=gy+row*ch;
+        c.fillStyle=(reel+row)%2?'rgba(33,30,79,.36)':'rgba(255,255,255,.055)';c.fillRect(x+4,y+4,cw-8,ch-8);
+      }
+      const stopAt=(round?.wins?.length?640:220)+reel*(round?.wins?.length?45:25);
+      const rolling=previewOnly||elapsed<stopAt;
+      if(rolling){
+        const startTravel=!previewOnly&&Number.isFinite(previewStartedAt)&&Number.isFinite(presentationStartedAt)
+          ? Math.max(0,presentationStartedAt-previewStartedAt)*PREVIEW_CELLS_PER_MS:0;
+        const landingCell=startTravel?Math.ceil(startTravel)+LANDING_CELL:LANDING_CELL;
+        const travel=previewOnly?elapsed*PREVIEW_CELLS_PER_MS
+          :startTravel?startTravel+(landingCell-startTravel)*reelTravelCells(elapsed,stopAt)/LANDING_CELL
+          :reelTravelCells(elapsed,stopAt);
+        const first=Math.floor(travel)-1;
+        const start=spinStartVisible?.[reel];
+        for(let index=first;index<=first+7;index++){
+          const raw=previewOnly?reelFillerSymbol(strip,start,index,localPreviewSeed+reel*101)
+            :reelStripSymbol(strip,start,round?.visible?.[reel],index,localPreviewSeed+reel*101,landingCell);
+          const parsed=parseSymbol(raw);
+          drawOlympusSymbol(c,parsed.symbol,gx+reel*cw+cw/2,gy+(index-travel+.5)*ch,84,{value:parsed.value});
+        }
+      }else{
+        for(let row=0;row<5;row++){
+          const parsed=parseSymbol(round?.visible?.[reel]?.[row]);
+          drawOlympusSymbol(c,parsed.symbol,gx+reel*cw+cw/2,gy+(row+.5)*ch,84,{value:parsed.value,glow:parsed.symbol==='MULT'||parsed.symbol==='SCATTER'});
+        }
+      }
+      c.restore();
+    }
+  }
+  function drawIdleGrid(c,now){
+    if(!idleGrid){
+      idleGrid=document.createElement('canvas');idleGrid.width=984;idleGrid.height=720;
+      const cached=idleGrid.getContext('2d');cached.translate(-88,-162);
+      drawGrid(cached,null,ROUND_MS,now);
+    }
+    c.drawImage(idleGrid,88,162);
   }
   function drawKingPanel(c,round,now){
     const mult=Math.max(1,Number(round?.featureMultiplier||round?.sequenceMultiplier||1));
@@ -115,18 +174,18 @@ export default function liveOlympusMachine(parent,machine,floorY){
     c.textAlign='center';c.fillStyle='#f5df82';c.font='800 22px Arial';c.fillText(round?.mode==='free'?'TOTAL MULTIPLIER':'SEQUENCE MULTIPLIER',1285,854);
     c.fillStyle='#fff';c.font='900 46px Georgia';c.fillText(`${mult}×`,1285,901);
   }
-  function drawFooter(c,spin,round,displayedWin,animating){
+  function drawFooter(c,spin,round,displayedWin,animating,previewOnly=false){
     c.fillStyle='rgba(19,14,48,.92)';c.fillRect(72,930,1390,145);c.strokeStyle='#d8b557';c.lineWidth=5;c.strokeRect(72,930,1390,145);
     c.textAlign='left';c.fillStyle='#cfc5e8';c.font='700 22px Arial';c.fillText('BET',125,972);c.fillText('WIN',475,972);c.fillText('STATUS',835,972);
     c.fillStyle='#fff1b2';c.font='900 40px Arial';c.fillText(money(spin?.bet??ui.bet),125,1022);c.fillText(money(displayedWin),475,1022);
-    c.fillStyle=animating?'#ffe06b':'#dfe9ff';const status=animating?(round?.mode==='free'?`FREE SPIN ${round.featureSpin} · TUMBLE ${round.tumble+1}`:`TUMBLE ${round?.tumble+1||1}`):(ui.showPaytable?'PAYTABLE':ui.autoSpin?'AUTO READY':ui.message||'READY');c.fillText(status,835,1022,560);
+    c.fillStyle=animating?'#ffe06b':'#dfe9ff';const status=previewOnly?'SPINNING':animating?(round?.mode==='free'?`FREE SPIN ${round.featureSpin} · TUMBLE ${round.tumble+1}`:`TUMBLE ${round?.tumble+1||1}`):(ui.showPaytable?'PAYTABLE':ui.autoSpin?'AUTO READY':ui.message||'READY');c.fillText(status,835,1022,560);
   }
   function drawFeatureOverlay(c,round,rt){
     if(!round)return;
     let title='',sub='';
     if(round.mode==='free'&&round.featureSpin===1&&round.tumble===0&&rt<620){title='15 FREE SPINS';sub='MULTIPLIERS PERSIST THROUGH THE BONUS';}
-    else if(Number(round.retriggeredSpins||0)>0&&rt>760){title=`+${round.retriggeredSpins} FREE SPINS`;sub='RETRIGGER';}
-    else if(Number(round.sequenceMultiplier||1)>1&&Number(round.sequencePayout||0)>0&&rt>760){title=`${round.sequenceMultiplier}× MULTIPLIER`;sub=`SEQUENCE WIN ${money(round.sequencePayout)}`;}
+    else if(Number(round.retriggeredSpins||0)>0&&rt>250){title=`+${round.retriggeredSpins} FREE SPINS`;sub='RETRIGGER';}
+    else if(Number(round.sequenceMultiplier||1)>1&&Number(round.sequencePayout||0)>0&&rt>250){title=`${round.sequenceMultiplier}× MULTIPLIER`;sub=`SEQUENCE WIN ${money(round.sequencePayout)}`;}
     if(!title)return;
     c.save();c.fillStyle='rgba(20,9,48,.86)';c.fillRect(250,405,850,190);c.strokeStyle='#ffe178';c.lineWidth=8;c.shadowColor='#68d9ff';c.shadowBlur=26;c.strokeRect(258,413,834,174);c.shadowBlur=0;c.textAlign='center';c.fillStyle='#fff0a2';c.font='900 70px Georgia';c.fillText(title,675,490,790);c.fillStyle='#efe8ff';c.font='800 25px Arial';c.fillText(sub,675,545,760);c.restore();
   }
@@ -149,23 +208,33 @@ export default function liveOlympusMachine(parent,machine,floorY){
   }
 
   function drawScreen(now){
-    const c=screen.ctx,spin=state?.spin,rounds=spin?.rounds||[];
+    const c=screen.ctx,spin=state?.spin,rounds=spin?.rounds||[],previewOnly=Boolean(state?.preview&&!spin);
     c.setTransform(DISPLAY_SCALE,0,0,DISPLAY_SCALE,0,0);
-    const offset=Number(state?.presentationOffsetMs||0),elapsed=spin?Math.max(0,serverAt+now-clockAt-spin.startedAt+offset):Infinity;
-    const animating=Boolean(spin&&elapsed<spin.durationMs&&rounds.length);
-    const ri=rounds.length?(animating?Math.min(rounds.length-1,Math.floor(elapsed/ROUND_MS)):rounds.length-1):0;
-    const round=rounds[ri]||null,rt=animating?Math.max(0,elapsed-ri*ROUND_MS):ROUND_MS;
-    triggerRoundAudio(round,ri);
-    drawBackground(c,now,round?.mode==='free');drawHeader(c,round,spin);drawGrid(c,round,rt,now);drawKingPanel(c,round,now);drawFeatureOverlay(c,round,rt);
+    const effectiveNow=serverAt+now-clockAt+Number(state?.presentationOffsetMs||0);
+    const elapsed=spin?Math.max(0,effectiveNow-(state?.presentationStartedAt??spin.startedAt)):Infinity;
+    const animating=previewOnly||Boolean(spin&&elapsed<spin.durationMs&&rounds.length);
+    const activeRound=rounds.length?roundAtElapsed(rounds,elapsed):{index:0,time:0,duration:ROUND_MS};
+    const ri=rounds.length?(animating?activeRound.index:rounds.length-1):0;
+    const previewTick=previewOnly?Math.max(0,effectiveNow-state.preview.startedAt):0;
+    const round=rounds[ri]||null,rt=previewOnly?previewTick:animating?activeRound.time:activeRound.duration;
+    if(!previewOnly)triggerRoundAudio(round,ri);
+    drawBackground(c,now,round?.mode==='free');drawHeader(c,round,spin);
+    const firstRoundRolling=ri===0&&animating&&elapsed<(round?.wins?.length?865:345);
+    if(previewOnly)drawRollingGrid(c,previewTick,true,null,null,null);
+    else if(!round)drawIdleGrid(c,now);
+    else if(firstRoundRolling)drawRollingGrid(c,elapsed,false,round,state?.preview?.startedAt,state?.presentationStartedAt??spin?.startedAt);
+    else drawGrid(c,round,rt,now);
+    drawKingPanel(c,round,now);drawFeatureOverlay(c,round,rt);
     let shown=rounds.length?totalThrough(rounds,ri):Number(spin?.totalPayout||0);
-    const seq=Number(round?.sequencePayout||0);if(animating&&seq>0){const prev=shown-seq;shown=prev+seq*easeOut((rt-840)/430);}
+    const seq=Number(round?.sequencePayout||0);if(animating&&seq>0){const prev=shown-seq;shown=prev+seq*easeOut((rt-PAYOUT_ROUND_MS*.38)/(PAYOUT_ROUND_MS*.48));}
     const cents=Math.floor(Math.max(0,shown)*100),nowMs=performance.now();if(cents!==lastCoinCents&&nowMs-lastCoinAt>48&&shown>0){lastCoinCents=cents;lastCoinAt=nowMs;slotCoinTick(cents);}
-    drawFooter(c,spin,round,shown,animating);
+    drawFooter(c,spin||(previewOnly?{bet:state.preview.bet}:null),round,shown,animating,previewOnly);
     if(ui.showPaytable&&!animating)drawPaytable(c);
     screen.texture.needsUpdate=true;lastDraw=now;
   }
   function frame(now){
-    const animated=state?.spin&&(serverAt+now-clockAt+Number(state?.presentationOffsetMs||0))<state.spin.startedAt+state.spin.durationMs;
+    const animated=Boolean(state?.preview&&!state?.spin)||(state?.spin&&
+      (serverAt+now-clockAt+Number(state?.presentationOffsetMs||0))<(state.presentationStartedAt??state.spin.startedAt)+state.spin.durationMs);
     if(lastDraw<0||(animated&&now-lastDraw>=16)||(!animated&&now-lastDraw>=90))drawScreen(now);
     const ready=!ui.busy&&!animated;
     marqueeMesh.material.emissiveIntensity=animated?1.12:1+.08*(.5+.5*Math.sin(now*.002));
@@ -181,5 +250,5 @@ export default function liveOlympusMachine(parent,machine,floorY){
     if(now>=pressUntil)pressedAction=null;
   }
   drawScreen(performance.now());
-  return{id:machine.id,controls,update,updateControls,setHover,press,frame};
+  return{id:machine.id,group:g,controls,update,updateControls,setHover,press,frame};
 }

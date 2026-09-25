@@ -16,7 +16,7 @@ const { getClient, pool } = require('../db');
       ('casino_presence','casino_browser_rooms','casino_browser_members','casino_browser_signals','casino_slot_requests','trading_market','trading_positions','trading_orders')`);
     if (result.rows[0].count !== 8) throw new Error('Casino schema incomplete');
     await client.query('COMMIT');
-    console.log('Casino schema verified, including synthetic market, positions and orders.');
+    console.log('Casino schema verified, including archived market state, positions and orders.');
   } catch (error) {
     if (client) await client.query('ROLLBACK').catch(() => {});
     console.error('Casino migration failed:', error.code || 'database unavailable');

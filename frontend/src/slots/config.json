@@ -2752,7 +2752,11 @@
     "retriggerSpins": 5,
     "maxTumbles": 40,
     "maxFreeSpins": 60,
-    "roundDurationMs": 1350,
+    "roundDurationMs": 2000,
+    "payoutRoundDurationMs": 850,
+    "noWinRoundDurationMs": 180,
+    "minimumSpinDurationMs": 450,
+    "spinSettleMs": 150,
     "freeWeights": {
       "BLUE": 18,
       "GREEN": 17,

@@ -2,6 +2,13 @@ import * as THREE from 'three';
 
 // Every asset is built from geometry here: no remote models or texture downloads.
 const materials = new Map();
+const avatarGeometries = new Map();
+function avatarMesh(parent, key, geometryFactory, color, position) {
+  if (!avatarGeometries.has(key)) avatarGeometries.set(key, geometryFactory());
+  const part = mesh(parent, avatarGeometries.get(key), color, position);
+  part.userData.sharedGeometry = true;
+  return part;
+}
 export function material(color, extra = {}) {
   const key = JSON.stringify([color, extra]);
   if (!materials.has(key)) materials.set(key, new THREE.MeshStandardMaterial({ color, roughness: 0.78, flatShading: true, ...extra }));
@@ -14,6 +21,22 @@ export function mesh(parent, geometry, color, position = [0, 0, 0], extra) {
 }
 export function box(parent, size, color, position, extra) {
   return mesh(parent, new THREE.BoxGeometry(...size), color, position, extra);
+}
+export function instancedBoxes(parent, boxes, color, extra) {
+  if (!boxes.length) return null;
+  const instances = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), material(color, extra), boxes.length);
+  const transform = new THREE.Matrix4();
+  boxes.forEach(({ size, position }, index) => {
+    transform.makeScale(...size);
+    transform.setPosition(...position);
+    instances.setMatrixAt(index, transform);
+  });
+  instances.instanceMatrix.needsUpdate = true;
+  instances.computeBoundingSphere();
+  instances.castShadow = true;
+  instances.receiveShadow = true;
+  parent.add(instances);
+  return instances;
 }
 export function cylinder(parent, top, bottom, height, color, position, sides = 10, extra) {
   return mesh(parent, new THREE.CylinderGeometry(top, bottom, height, sides), color, position, extra);
@@ -117,38 +140,44 @@ export function car(parent, x, z, color, direction) {
 }
 export function avatar(parent, username, color, faceSeed = 0) {
   const g = group(parent);
-  cylinder(g, 0.24, 0.3, 0.65, color, [0, 1.03, 0], 6);
-  mesh(g, new THREE.IcosahedronGeometry(0.24, 1), '#d3a082', [0, 1.65, 0]);
+  const avatarBox = (parentPart, size, shade, position) => avatarMesh(parentPart, `box:${size.join(':')}`, () => new THREE.BoxGeometry(...size), shade, position);
+  const avatarSphere = (parentPart, radius, width, height, shade, position) => avatarMesh(parentPart, `sphere:${radius}:${width}:${height}`, () => new THREE.SphereGeometry(radius, width, height), shade, position);
+  avatarMesh(g, 'body', () => new THREE.CylinderGeometry(0.24, 0.3, 0.65, 6), color, [0, 1.03, 0]);
+  avatarMesh(g, 'head', () => new THREE.IcosahedronGeometry(0.24, 1), '#d3a082', [0, 1.65, 0]);
   const legs = [-0.13, 0.13].map(a => {
     const hip = group(g, a, 0.7, 0);
-    box(hip, [0.2, 0.27, 0.22], '#3d4d4c', [0, -0.135, 0]);
+    avatarBox(hip, [0.2, 0.27, 0.22], '#3d4d4c', [0, -0.135, 0]);
     const knee = group(hip, 0, -0.27, 0);
-    box(knee, [0.2, 0.28, 0.22], '#3d4d4c', [0, -0.14, 0]);
+    avatarBox(knee, [0.2, 0.28, 0.22], '#3d4d4c', [0, -0.14, 0]);
     return { hip, knee };
   });
   const arms = [-1, 1].map(side => {
     const shoulder = group(g, side * 0.34, 1.27, 0);
-    box(shoulder, [0.17, 0.32, 0.19], color, [0, -0.16, 0]);
+    avatarBox(shoulder, [0.17, 0.32, 0.19], color, [0, -0.16, 0]);
     const elbow = group(shoulder, 0, -0.32, 0);
-    box(elbow, [0.15, 0.28, 0.17], color, [0, -0.14, 0]);
-    const hand = mesh(elbow, new THREE.IcosahedronGeometry(0.095, 1), '#d3a082', [0, -0.31, 0]);
+    avatarBox(elbow, [0.15, 0.28, 0.17], color, [0, -0.14, 0]);
+    const hand = avatarMesh(elbow, 'hand', () => new THREE.IcosahedronGeometry(0.095, 1), '#d3a082', [0, -0.31, 0]);
     shoulder.rotation.z = side * 0.04;
     return { side, shoulder, elbow, hand };
   });
   const name = sign(g, username.slice(0, 22), 1.7, [0, 2.17, 0]);
-  const chatCanvas = document.createElement('canvas'); chatCanvas.width = 1024; chatCanvas.height = 512;
-  const chatContext = chatCanvas.getContext('2d');
-  const chatTexture = new THREE.CanvasTexture(chatCanvas); chatTexture.colorSpace = THREE.SRGBColorSpace;
-  const chatBubble = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 1.7), new THREE.MeshBasicMaterial({ map: chatTexture, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+  let chatContext = null, chatTexture = null;
+  const chatBubble = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 1.7), new THREE.MeshBasicMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide }));
   chatBubble.position.set(0, 3.08, 0); chatBubble.scale.setScalar(0.001); chatBubble.visible = false; g.add(chatBubble);
   const face = group(g, 0, 1.65, -0.2, Math.PI);
   const pupils = [-0.095, 0.095].map(x => {
-    mesh(face, new THREE.SphereGeometry(0.085, 10, 8), '#fff8e6', [x, 0.045, 0.015]);
-    return mesh(face, new THREE.SphereGeometry(0.033, 8, 6), '#262c30', [x, 0.045, 0.092]);
+    avatarSphere(face, 0.085, 10, 8, '#fff8e6', [x, 0.045, 0.015]);
+    return avatarSphere(face, 0.033, 8, 6, '#262c30', [x, 0.045, 0.092]);
   });
   const mouth = mesh(face, new THREE.BufferGeometry(), '#60362e');
-  let currentSeed, chatUntil = 0, chatShownAt = 0, chatScale = 1, chatHeight = 3.08;
+  let currentSeed, currentSeat = null, chatUntil = 0, chatShownAt = 0, chatScale = 1, chatHeight = 3.08;
   function showChat(message) {
+    if (!chatContext) {
+      const chatCanvas = document.createElement('canvas'); chatCanvas.width = 1024; chatCanvas.height = 512;
+      chatContext = chatCanvas.getContext('2d');
+      chatTexture = new THREE.CanvasTexture(chatCanvas); chatTexture.colorSpace = THREE.SRGBColorSpace;
+      chatBubble.material.map = chatTexture; chatBubble.material.needsUpdate = true;
+    }
     const words = String(message).trim().slice(0, 100).split(/\s+/), lines = [];
     chatContext.font = '600 54px sans-serif';
     for (const word of words) {
@@ -213,6 +242,8 @@ export function avatar(parent, username, color, faceSeed = 0) {
   }
   setFace(faceSeed);
   function setSeated(value) {
+    if (value === currentSeat) return;
+    currentSeat = value;
     legs.forEach(({ hip, knee }) => { hip.rotation.x = value ? Math.PI / 2 : 0; knee.rotation.x = value ? -Math.PI / 2 : 0; });
   }
   return { group: g, name, chatBubble, arms, setFace, showChat, updateChat, setChatPresentation, setSeated };
@@ -251,4 +282,4 @@ export function receptionist(parent, x, y, z) {
   }
   return { group: g, trackNearest };
 }
-export function clearMaterialCache() { materials.clear(); }
+export function clearMaterialCache() { materials.clear(); avatarGeometries.forEach(geometry => geometry.dispose()); avatarGeometries.clear(); }

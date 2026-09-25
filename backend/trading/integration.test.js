@@ -7,7 +7,7 @@ const { readFileSync } = require('node:fs');
 const path = require('node:path');
 const express = require('express');
 
-test('trading endpoints: schema, shared prices, settlement, retries and rejection', { skip: process.env.RUN_TRADING_DB_TESTS !== '1' }, async t => {
+test('trading endpoints: live prices, settlement, retries and legacy liquidation', { skip: process.env.RUN_TRADING_DB_TESTS !== '1' }, async t => {
   require('dotenv').config({ path: path.join(__dirname, '../.env'), quiet: true });
   const { pool } = require('../db');
   assert.ok(pool, 'Configure the database before running this integration test');
@@ -33,7 +33,13 @@ test('trading endpoints: schema, shared prices, settlement, retries and rejectio
       }, release() {}
     };
     const app = express(); app.use(express.json());
-    app.use('/api/trading', require('./router')((req, res, next) => { req.user = { id: 1 }; next(); }, { getClient: async () => isolatedClient }));
+    const testTick = Math.floor(Date.now() / 60000);
+    const marketFeed = { getMarket: async () => {
+      const fetchedAt = Date.now();
+      return { tick: testTick, fetchedAt, serverNow: fetchedAt, tickMs: 60000, source: 'Test feed', synthetic: false,
+        assets: ['SP500', 'NAS100', 'TSLA', 'AAPL', 'GOOGL'].map(symbol => ({ symbol, name: symbol, price: 10000, bid: 9990, ask: 10010, history: [], quotedAt: fetchedAt, marketOpen: true, tradable: true })) };
+    } };
+    app.use('/api/trading', require('./router')((req, res, next) => { req.user = { id: 1 }; next(); }, { getClient: async () => isolatedClient, marketFeed }));
     server = await new Promise(resolve => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
     const base = `http://127.0.0.1:${server.address().port}/api/trading`;
     const request = async (route, body) => {
@@ -41,12 +47,12 @@ test('trading endpoints: schema, shared prices, settlement, retries and rejectio
       return { status: response.status, body: await response.json() };
     };
     const market = await request('/market');
-    assert.equal(market.status, 200); assert.equal(market.body.assets.length, 3);
-    assert.equal(market.body.synthetic, true);
+    assert.equal(market.status, 200); assert.equal(market.body.assets.length, 5);
+    assert.equal(market.body.synthetic, false);
     const account = await request('/account');
     assert.equal(account.status, 200); assert.equal(account.body.balance, 1000);
     assert.deepEqual(account.body.positions, []);
-    const order = { requestId: randomUUID(), symbol: 'FLUX', side: 'buy', quantity: 2, quoteTick: market.body.tick, limitPrice: 1000001 };
+    const order = { requestId: randomUUID(), symbol: 'AAPL', side: 'buy', quantity: 2, quoteTick: market.body.tick, limitPrice: 1000001 };
     const buy = await request('/orders', order);
     assert.equal(buy.status, 200);
     assert.equal(buy.body.positions[0].quantity, 2);
@@ -73,7 +79,16 @@ test('trading endpoints: schema, shared prices, settlement, retries and rejectio
     assert.equal(sell.body.order.realizedPnlCents, sell.body.order.total - buy.body.order.total);
     assert.equal(sell.body.balance, (100000 - buy.body.order.total + sell.body.order.total) / 100);
     assert.equal(sell.body.orders.length, 2);
-    t.diagnostic('Market/account HTTP 200; buy, sell, retry and five rejection cases verified using isolated test credits.');
+    await client.query('INSERT INTO trading_market(id,state) VALUES(1,$1)', [JSON.stringify({ assets: [{ symbol: 'AMBR', price: 12500, history: [] }] })]);
+    await client.query('INSERT INTO trading_positions(user_id,symbol,quantity,cost_cents) VALUES(1,$1,2,25000)', ['AMBR']);
+    const legacyMarket = await request('/market');
+    assert.equal(legacyMarket.body.legacyAssets[0].symbol, 'AMBR');
+    const legacySell = await request('/orders', { ...order, requestId: randomUUID(), symbol: 'AMBR', side: 'sell', quantity: 2, quoteTick: legacyMarket.body.tick, limitPrice: 1 });
+    assert.equal(legacySell.status, 200);
+    assert.equal(legacySell.body.positions.length, 0);
+    const legacyBuy = await request('/orders', { ...order, requestId: randomUUID(), symbol: 'AMBR', quoteTick: legacyMarket.body.tick });
+    assert.equal(legacyBuy.status, 400);
+    t.diagnostic('Five live assets, settlement, retries, rejections and legacy liquidation verified using isolated test credits.');
   } finally {
     if (server) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
     if (client) { await client.query('ROLLBACK'); client.release(); }

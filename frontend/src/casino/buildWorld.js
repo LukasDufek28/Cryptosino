@@ -6,7 +6,7 @@ import liveSlotMachine from './liveSlotMachine';
 import liveOlympusMachine from './liveOlympusMachine';
 import liveBlackjackTable from './liveBlackjackTable';
 import tradingFacility from './tradingFacility';
-import { box, cylinder, group, mesh, sign, plant, couch, floorLamp, pendant, slotMachine, gameTable, car, receptionist as receptionistModel } from './models';
+import { box, cylinder, group, mesh, instancedBoxes, sign, plant, couch, floorLamp, pendant, slotMachine, gameTable, car, receptionist as receptionistModel } from './models';
 
 export default function buildWorld(scene) {
   const upper = layout.upperFloor;
@@ -19,17 +19,18 @@ export default function buildWorld(scene) {
   box(scene, [150, 0.12, 9], '#797c7a', [0, -0.09, 22]);
   box(scene, [150, 0.16, 4.5], '#d7c7aa', [0, -0.06, 14]);
   box(scene, [150, 0.16, 3.6], '#d7c7aa', [0, -0.06, 29]);
-  for (let x = -70; x < 75; x += 7) box(scene, [3.6, 0.025, 0.1], '#e4d6ab', [x, 0.02, 22]);
-  for (let z = 18.5; z < 26; z += 0.85) box(scene, [2.4, 0.03, 0.45], '#e8ddbd', [18, 0.025, z]);
+  instancedBoxes(scene, Array.from({ length: 21 }, (_, i) => ({ size: [3.6, 0.025, 0.1], position: [-70 + i * 7, 0.02, 22] })), '#e4d6ab');
+  instancedBoxes(scene, Array.from({ length: 9 }, (_, i) => ({ size: [2.4, 0.03, 0.45], position: [18, 0.025, 18.5 + i * 0.85] })), '#e8ddbd');
   const facades = ['#c59175', '#879f92', '#d8b186', '#d6c5a2', '#a49185'];
+  const facadeWindows = [], facadeSills = [];
   for (let i = 0; i < 9; i++) {
     const x = -48 + i * 12, h = 7 + (i % 3) * 3;
     const g = group(scene, x, 0, 39);
     box(g, [10, h, 9], facades[i % facades.length], [0, h / 2, 0]);
     box(g, [10.5, 0.3, 9.6], '#786c60', [0, h + 0.1, 0]);
     for (let wx = -3; wx <= 3; wx += 3) for (let wy = 5.4; wy < h - 0.6; wy += 2.7) {
-      box(g, [1.4, 1.8, 0.08], '#4e6764', [wx, wy, -4.56]);
-      box(g, [1.65, 0.12, 0.3], '#efd4ac', [wx, wy - 0.95, -4.66]);
+      facadeWindows.push({ size: [1.4, 1.8, 0.08], position: [x + wx, wy, 34.44] });
+      facadeSills.push({ size: [1.65, 0.12, 0.3], position: [x + wx, wy - 0.95, 34.34] });
     }
     // Real shopfronts leave a dedicated sign band above the doors and awning.
     [-2.9, 2.9].forEach(wx => {
@@ -47,6 +48,8 @@ export default function buildWorld(scene) {
     }));
     plant(scene, x + 5, 0, 31.4, 1.9);
   }
+  instancedBoxes(scene, facadeWindows, '#4e6764');
+  instancedBoxes(scene, facadeSills, '#efd4ac');
   for (let x = -36; x <= 36; x += 12) {
     cylinder(scene, 0.055, 0.12, 4.7, '#58625c', [x, 2.35, 15.1]);
     cylinder(scene, 0.48, 0.16, 0.3, '#58625c', [x, 4.75, 15.1]);
@@ -60,7 +63,10 @@ export default function buildWorld(scene) {
   // Landings meet the first and last stair exactly, without a visible slit.
   box(building, [4.6, 0.25, 6.5], '#9c7855', [-11.7, upper - 0.14, -6.75]);
   box(building, [4.6, 0.25, 2.5], '#9c7855', [-11.7, upper - 0.14, 8.75]);
-  for (let x = -8.8; x < 14; x += 0.8) box(building, [0.76, 0.025, 19.7], Math.round(x * 5) % 2 ? '#bd946b' : '#c59f77', [x, upper + 0.005, 0]);
+  const floorPlanks = Array.from({ length: 29 }, (_, i) => -8.8 + i * 0.8);
+  ['#bd946b', '#c59f77'].forEach(color => instancedBoxes(building,
+    floorPlanks.filter(x => (Math.round(x * 5) % 2 ? '#bd946b' : '#c59f77') === color)
+      .map(x => ({ size: [0.76, 0.025, 19.7], position: [x, upper + 0.005, 0] })), color));
   box(building, [28, 0.25, 20], '#dfcaa6', [0, 9.25, 0]);
   [0, upper].forEach((y, floor) => {
     // Each wall is exactly one storey tall, so adjacent storeys share an edge.
@@ -72,11 +78,17 @@ export default function buildWorld(scene) {
     box(building, [27.6, 0.07, 0.17], '#c6a773', [0, y + 1.1, -9.75]);
     // Leave the ground-floor staircase clear of hanging lamps.
     (floor === 0 ? [-5, 0, 5, 10] : [-10, -5, 0, 5, 10]).forEach(x => pendant(building, x, y + 4.35, -2));
-    for (let x = -14; x <= 14; x += 4.65) box(building, [0.16, 4.5, 0.25], '#b39870', [x, y + 2.25, 9.95]);
-    // Lower center stays open as the entrance; upper panes are continuous.
-    [-10.5, -7, -3.5, 0, 3.5, 7, 10.5].forEach(x => {
-      if (!floor && x === 0) return;
-      const glass = box(building, [3.45, 3.95, 0.025], '#d5e9de', [x, y + 2.15, 9.97], { transparent: true, opacity: 0.12, depthWrite: false });
+    for (let x = -14; x <= 14; x += 4.65) {
+      if (!floor && Math.abs(x) < 0.2) continue;
+      box(building, [0.16, 4.5, 0.25], '#b39870', [x, y + 2.25, 9.95]);
+    }
+    // One continuous upstairs pane; downstairs panes end before the two
+    // entrance pillars at x=-2.2 and x=2.2, leaving the doorway clear.
+    const glassPanes = floor ? [{ x: 0, width: 27.5 }] : [
+      { x: -8.015, width: 11.47 }, { x: 8.015, width: 11.47 }
+    ];
+    glassPanes.forEach(({ x, width }) => {
+      const glass = box(building, [width, floor ? 3.95 : 4.14, 0.025], '#d5e9de', [x, y + (floor ? 2.15 : 2.245), 9.97], { transparent: true, opacity: 0.12, depthWrite: false });
       glass.castShadow = false;
     });
     box(building, [28, 0.2, 0.4], '#b0966c', [0, y + 4.4, 9.95]);
@@ -88,17 +100,23 @@ export default function buildWorld(scene) {
   const entry = sign(building, 'THE AMBER HOUSE', 9, [0, 3.7, 10.2], { serif: true });
   entry.rotation.y = 0;
   box(building, [6, 0.18, 2.3], '#36564a', [0, 3.1, 11]);
-  for (let x = -2.7; x <= 2.7; x += 0.6) box(building, [0.3, 0.03, 2.2], '#d9c49b', [x, 3.2, 11]);
+  instancedBoxes(building, Array.from({ length: 10 }, (_, i) => ({ size: [0.3, 0.03, 2.2], position: [-2.7 + i * 0.6, 3.2, 11] })), '#d9c49b');
   [-2.2, 2.2].forEach(x => box(building, [0.12, 3, 0.16], '#a88e5c', [x, 1.5, 10]));
 
   const stair = layout.stairs;
   const length = stair.bottomZ - stair.topZ;
-  for (let i = 0; i < 23; i++) {
+  // The west edge meets the inside face of the wall at x=-13.85; the rail
+  // stays 0.1 units inboard so it remains visible instead of clipping into it.
+  const stairCenterX = (stair.minX + stair.maxX) / 2 - 0.05;
+  const stairWidth = stair.maxX - stair.minX + 0.3;
+  instancedBoxes(building, Array.from({ length: 23 }, (_, i) => {
     const height = (i + 1) * upper / 23;
-    box(building, [3.65, height, length / 23 + 0.02], '#d3ba95', [-11.45, height / 2, stair.bottomZ - (i + 0.5) * length / 23]);
-    box(building, [2.6, 0.025, length / 23], '#886453', [-11.45, height + 0.013, stair.bottomZ - (i + 0.5) * length / 23]);
-  }
-  [-13.4, -9.5].forEach(x => {
+    return { size: [stairWidth, height, length / 23 + 0.02], position: [stairCenterX, height / 2, stair.bottomZ - (i + 0.5) * length / 23] };
+  }), '#d3ba95');
+  instancedBoxes(building, Array.from({ length: 23 }, (_, i) => ({
+    size: [stairWidth, 0.025, length / 23], position: [stairCenterX, (i + 1) * upper / 23 + 0.013, stair.bottomZ - (i + 0.5) * length / 23]
+  })), '#886453');
+  [stair.minX - 0.1, stair.maxX + 0.1].forEach(x => {
     for (let i = 0; i <= 10; i++) cylinder(building, 0.035, 0.035, 1.1, '#b09261', [x, upper * i / 10 + 0.55, stair.bottomZ - length * i / 10], 6);
     const rail = box(building, [0.08, 0.08, Math.hypot(length, upper)], '#b09261', [x, upper / 2 + 1.1, (stair.bottomZ + stair.topZ) / 2]);
     rail.rotation.x = Math.atan2(upper, length);
@@ -125,6 +143,8 @@ export default function buildWorld(scene) {
     subtitle: 'TOP 10 · ALL-TIME PERSONAL HIGHS', valueKey: 'peak_balance', columnTitle: 'PEAK'
   });
 
+  // The renderer updates this reflection only while the mirror is in the camera frustum.
+  // Reflector also skips the reflection pass when viewed from behind.
   // A real reflection, with a separate camera layer for the first-person body.
   box(building, [3.3, 2.9, 0.18], '#b99861', [-5, 1.65, -9.65]);
   const mirror = new Reflector(new THREE.PlaneGeometry(3, 2.6), {
@@ -144,7 +164,6 @@ export default function buildWorld(scene) {
   box(building, [19.5, 0.032, 8.5], '#506b59', [2.3, upper + 0.035, -4.9]);
   box(building, [19.1, 0.035, 8.1], '#365345', [2.3, upper + 0.04, -4.9]);
   sign(building, 'THE AMBER HOUSE', 7, [2, upper + 3.35, -9.72], { serif: true });
-  sign(building, 'GAMES  /  LOUNGE  /  GOOD COMPANY', 5.2, [2, upper + 2.15, -9.7]);
   let liveBlackjack = null;
   const tablePlacard = s => {
     const side = s.x > 7 ? -1 : 1;
