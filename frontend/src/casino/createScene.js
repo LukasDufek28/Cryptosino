@@ -408,7 +408,7 @@ export default function createScene(host, events) {
       const targetFov = blackjackView ? 58 : 68;
       if (Math.abs(camera.fov - targetFov) > .01) { camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, Math.min(dt * 8, 1)); camera.updateProjectionMatrix(); }
       camera.rotation.set(pitch, yaw, 0, 'YXZ');
-      self.group.position.set(pos.x, pos.y + jumpHeight + (seat?.kind === 'slot' ? 0.25 : seat ? -0.4 : 0), pos.z);
+      self.group.position.set(pos.x, pos.y + jumpHeight + (seat?.kind === 'slot' || seat?.kind === 'blackjack' ? 0.25 : seat ? -0.4 : 0), pos.z);
       self.setSeated(Boolean(seat));
       self.group.rotation.y = yaw;
       self.chatBubble.quaternion.copy(camera.quaternion).premultiply(inverseRotation.copy(self.group.quaternion).invert());
@@ -534,7 +534,7 @@ export default function createScene(host, events) {
           a.group.position.set(p.x, p.y, p.z); peers.set(p.id, { ...a, target: new THREE.Vector3(), yaw: p.yaw });
         }
         const peer = peers.get(p.id), peerSeat = layout.seats.find(s => s.id === p.seatId);
-        peer.target.set(p.x, p.y + (peerSeat?.kind === 'slot' ? 0.25 : p.seatId ? -0.4 : 0), p.z); peer.yaw = p.yaw;
+        peer.target.set(p.x, p.y + (peerSeat?.kind === 'slot' || peerSeat?.kind === 'blackjack' ? 0.25 : p.seatId ? -0.4 : 0), p.z); peer.yaw = p.yaw;
         peer.setSeated(Boolean(p.seatId));
         peer.setFace(p.faceSeed || 0);
       });

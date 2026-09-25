@@ -113,6 +113,7 @@ function totalBadge(parent,label,pos,formatValue){
   };
 }
 function outcomePopup(parent){
+  const blackjackExtraMs=1000;
   const {ctx,texture}=canvasTexture(768,256,true);
   const mat=new THREE.SpriteMaterial({map:texture,transparent:true,depthTest:false,depthWrite:false,toneMapped:false});
   const sprite=new THREE.Sprite(mat);
@@ -159,10 +160,11 @@ function outcomePopup(parent){
     frame(now){
       if(!data||now<data.start){sprite.visible=false;return;}
       const age=now-data.start;
-      if(age>1550){data=null;sprite.visible=false;mat.opacity=1;return;}
+      const extra=data.outcome==='blackjack'?blackjackExtraMs:0;
+      if(age>1550+extra){data=null;sprite.visible=false;mat.opacity=1;return;}
       sprite.visible=true;
       const intro=clamp(age/170,0,1);
-      const fade=age>1100?1-clamp((age-1100)/450,0,1):1;
+      const fade=age>1100+extra?1-clamp((age-1100-extra)/450,0,1):1;
       const pop=.9+.1*(1-Math.pow(1-intro,3));
       sprite.scale.set(.78*pop,.26*pop,1);
       sprite.position.y=1.58+.025*Math.sin(clamp(age/500,0,1)*Math.PI);
@@ -536,7 +538,7 @@ export default function liveBlackjackTable(tableGroup){
     }
 
     const finishAge=finishedAt?now-finishedAt:0;
-    if(state.phase==='finished'&&!cardsSwept&&finishAge>2350){clearCards();cardsSwept=true;}
+    if(state.phase==='finished'&&!cardsSwept&&finishAge>2350+(state.outcome==='blackjack'?1000:0)){clearCards();cardsSwept=true;}
     syncBetVisual();
     const bankTarget=(state.phase==='betting'||(state.phase==='finished'&&cardsSwept))&&!state.busy?1:0;
     bankPresence=lerp(bankPresence,bankTarget,.16);
