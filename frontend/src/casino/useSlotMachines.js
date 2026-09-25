@@ -53,6 +53,7 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance, bala
     const release = () => {
       const id = active; active = null;
       autoSpinning = false; setAutoSpin(false); setShowPaytable(false); stopSlotAmbience(); if (autoTimer) { clearTimeout(autoTimer); autoTimer = null; }
+      if (id) scene.updateSlotControlState(id, { message: '', busy: false, retry: false, autoSpin: false });
       if (!stopped) { setSelected(null); setBusy(false); }
       if (id && !localOnly) void scene.requestSlot('release', { machineId: id }).catch(() => {});
     };
@@ -139,9 +140,12 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance, bala
           const previewId = pending.requestId;
           if (stopped) return;
           const spin = result.spin, serverNow = result.serverNow || spin.startedAt;
+          // Version 0.0.28 peers reject a shared spin shorter than one second.
+          const sharedSpin = spin.variant === 'olympus' && spin.durationMs < 1000
+            ? { ...spin, durationMs: 1000 } : spin;
           let shared = false;
           if (!localOnly) {
-            try { await scene.requestSlot('spin', { machineId: active, spin, serverNow, previewId }); shared = true; }
+            try { await scene.requestSlot('spin', { machineId: active, spin: sharedSpin, serverNow, previewId }); shared = true; }
             catch { /* Show the settled result locally if the room connection drops. */ }
           }
           if (stopped) return;

@@ -65,6 +65,8 @@ export default function createScene(host, events) {
   const viewProjection = new THREE.Matrix4();
   const slotSphere = new THREE.Sphere(new THREE.Vector3(), 2.5);
   const slotLocations = new Map(layout.slotMachines.map(item => [item.id, item]));
+  const occupiedSlots = new Set();
+  const seatAvailable = item => item.kind !== 'slot' || !occupiedSlots.has(item.machineId);
   const groundInteractions = [{ kind: 'face', item: world.faceButton }, { kind: 'reset', item: world.resetButton },
     ...world.trading.terminals.map(item => ({ kind: 'game', item }))];
   const upperInteractions = [...layout.stations.filter(item => item.game !== 'slots').map(item => ({ kind: 'game', item })),
@@ -170,6 +172,7 @@ export default function createScene(host, events) {
       return;
     }
     if (nearest.kind === 'seat') {
+      if (!seatAvailable(nearest.item)) return;
       if (nearest.item.kind === 'slot') { clearInput(); unlock(); events.onSlot(nearest.item.machineId); return; }
       seat = nearest.item; pos.set(seat.x, layout.upperFloor, seat.z); yaw = seat.yaw; pitch = -0.03;
       poseRevision += 1;
@@ -337,6 +340,7 @@ export default function createScene(host, events) {
       let best = 3.4;
       upperInteractions.forEach(option => {
         const s = option.item;
+        if (option.kind === 'seat' && !seatAvailable(s)) return;
         const distance = Math.hypot(pos.x - s.x, pos.z - s.z);
         focus.set(s.x - pos.x, 0, s.z - pos.z).normalize();
         if (distance < best && direction.dot(focus) > 0.12) { nearest = option; best = distance; }
@@ -483,6 +487,8 @@ export default function createScene(host, events) {
     },
     updateSlots(machines, serverNow) {
       if (disposed) return;
+      occupiedSlots.clear();
+      machines.forEach(machine => { if (machine.sessionId) occupiedSlots.add(machine.id); });
       world.liveSlots.forEach(m => m.update(machines.find(state => state.id === m.id) || null, serverNow));
     },
     setSlotCommand(callback) { slotCommand = callback; },

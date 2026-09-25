@@ -45,6 +45,7 @@ test('a failed room share retries the saved Olympus result without another wager
     expect(global.fetch).toHaveBeenCalledTimes(1);
     expect(scene.requestSlot.mock.calls.filter(([action]) => action === 'start')).toHaveLength(1);
     expect(scene.requestSlot.mock.calls.filter(([action]) => action === 'spin')).toHaveLength(2);
+    expect(scene.requestSlot.mock.calls.filter(([action]) => action === 'spin')[0][1].spin.durationMs).toBe(1000);
     expect(result.current.retry).toBe(false);
   } finally {
     unmount();
