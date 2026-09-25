@@ -44,6 +44,18 @@ test('the room host shares a spin preview before the validated final result', as
     expect(final.spin.id).toBe('result-1');
     expect(final.preview.id).toBe('preview-1');
     expect(Number.isFinite(final.presentationStartedAt)).toBe(true);
+
+    await scene.request('release', { machineId: 'amber-joker' });
+    await scene.request('claim', { machineId: 'amber-olympus' });
+    await scene.request('start', { machineId: 'amber-olympus', previewId: 'preview-2', bet: 5 });
+    const olympusSpin = { ...spin, id: 'result-2', machineId: 'amber-olympus', variant: 'olympus',
+      durationMs: 450, visible: Array.from({ length: 6 }, () => Array(5).fill('BLUE')) };
+    await scene.request('spin', { machineId: 'amber-olympus', previewId: 'preview-2', spin: olympusSpin, serverNow: Date.now() });
+    const olympusFinal = states.at(-1).machines.find(machine => machine.id === 'amber-olympus');
+    expect(olympusFinal.spin.id).toBe('result-2');
+    await scene.request('spin', { machineId: 'amber-olympus', previewId: 'preview-2', spin: olympusSpin, serverNow: Date.now() });
+    expect(states.at(-1).machines.find(machine => machine.id === 'amber-olympus').presentationStartedAt)
+      .toBe(olympusFinal.presentationStartedAt);
   } finally {
     leave();
     global.fetch = originalFetch;

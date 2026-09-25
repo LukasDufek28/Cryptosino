@@ -12,9 +12,10 @@ const cleanSlotSpin = (spin, member, machine) => {
   const config = slotConfigs[machine.variant];
   const cols = Number(config?.cols || config?.reels?.length || 0);
   const rows = Number(config?.rows || 0);
+  const minimumDurationMs = machine.variant === 'olympus' ? Number(config.minimumSpinDurationMs || 450) : 1000;
   if (!spin || typeof spin !== 'object' || !cols || !rows || spin.machineId !== machine.id || spin.variant !== machine.variant ||
       spin.userId !== member.id || spin.username !== member.username || typeof spin.id !== 'string' ||
-      !Number.isFinite(spin.startedAt) || !Number.isFinite(spin.durationMs) || spin.durationMs < 1000 || spin.durationMs > 65000 ||
+      !Number.isFinite(spin.startedAt) || !Number.isFinite(spin.durationMs) || spin.durationMs < minimumDurationMs || spin.durationMs > 65000 ||
       !Number.isFinite(Number(spin.bet)) || !Number.isFinite(Number(spin.totalPayout)) || !Number.isFinite(Number(spin.balanceBefore)) ||
       !Array.isArray(spin.visible) || spin.visible.length !== cols || spin.visible.some(reel => !Array.isArray(reel) || reel.length !== rows)) return null;
   return spin;
@@ -235,6 +236,7 @@ export default function browserRoom(token, scene, onStatus) {
         return { ok: false, error: 'Sit at this machine again before spinning.' };
       const spin = cleanSlotSpin(packet.spin, member, machine);
       if (!spin) return { ok: false, error: 'Invalid shared spin result.' };
+      if (current?.spin?.id === spin.id) return { ok: true, state: slotState() };
       if (current.preview && current.preview.id !== packet.previewId) return { ok: false, error: 'Spin start does not match this result.' };
       const oldOffset = slotServerOffset;
       if (Number.isFinite(packet.serverNow)) slotServerOffset = packet.serverNow - Date.now();
@@ -484,7 +486,7 @@ export default function browserRoom(token, scene, onStatus) {
     if (isHost()) {
       let expiredPreview = false;
       for (const [id, state] of slotMachines) {
-        if (state.preview && !state.spin && Date.now() + slotServerOffset - state.preview.startedAt > 12000) {
+        if (state.preview && !state.spin && Date.now() + slotServerOffset - state.preview.startedAt > 25000) {
           slotMachines.set(id, { ...state, preview: null }); expiredPreview = true;
         }
       }

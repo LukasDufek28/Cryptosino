@@ -24,12 +24,12 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance, bala
     if (!ready) return undefined;
     const scene = sceneRef.current;
     const localOnly = LOCAL_DEMO && !token;
-    let stopped = false, active = null, claiming = false, pending = null, sending = false, autoSpinning = false, autoTimer = null;
+    let stopped = false, active = null, claiming = false, pending = null, pendingResult = null, sending = false, autoSpinning = false, autoTimer = null;
     let endAt = 0, resultText = '', pendingBalance = null, messageTimer = null, machines = [], autoDelayMs = 650;
     const controllers = new Set();
     const request = async (path, body) => {
       const controller = new AbortController(); controllers.add(controller);
-      const timer = setTimeout(() => controller.abort(), 8000);
+      const timer = setTimeout(() => controller.abort(), 20000);
       try {
         const response = await fetch(`${API}${path}`, { method: 'POST', cache: 'no-store', signal: controller.signal,
           headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
@@ -128,15 +128,15 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance, bala
         sending = true; setBusy(true); setRetry(false); setMessage('Waiting for the casino…');
         let previewStarted = false;
         try {
-          if (!localOnly) {
+          if (!localOnly && !pendingResult) {
             await scene.requestSlot('start', { machineId: active, previewId: pending.requestId, bet: pending.bet });
             previewStarted = true;
           }
-          const result = localOnly
+          const result = pendingResult || (localOnly
             ? demoSlotSpin({ variant: machine.variant, bet: pending.bet, balance: balanceRef.current, machineId: active })
-            : await request('/api/slots/spin', pending);
+            : await request('/api/slots/spin', pending));
+          pendingResult = result;
           const previewId = pending.requestId;
-          pending = null;
           if (stopped) return;
           const spin = result.spin, serverNow = result.serverNow || spin.startedAt;
           let shared = false;
@@ -152,18 +152,21 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance, bala
               username: spin.username, userId: spin.userId }];
             scene.updateSlots(machines, serverNow);
           }
+          if (shared || localOnly) { pending = null; pendingResult = null; }
           endAt = performance.now() + spin.durationMs;
           pendingBalance = Number(result.newBalance);
           resultText = `Return $${Number(spin.totalPayout).toFixed(2)} (stake $${Number(spin.bet).toFixed(2)}).`;
           const multiple=Number(spin.totalPayout||0)/Math.max(.01,Number(spin.bet||1));
           const maxWinX=Number(layout.slotMachines.find(item=>item.id===active)?.variant==='joker'?486:500);
           autoDelayMs=multiple>=maxWinX*.98?6900:multiple>=50?5800:multiple>=25?5000:multiple>=10?4000:multiple>=3?3100:(spin.respin?.count?1500:700);
-          setMessage('Reels spinning…');
+          setRetry(!shared && !localOnly);
+          setMessage(shared || localOnly ? 'Reels spinning…' : 'Result saved. Room sync interrupted; press SPIN to share it without another charge.');
+          if (!shared && !localOnly) setBusy(false);
         } catch (error) {
           if (stopped) return;
           if (previewStarted && pending && !localOnly) void scene.requestSlot('cancel', { machineId: active, previewId: pending.requestId }).catch(() => {});
           autoSpinning = false; setAutoSpin(false);
-          if (error.status >= 400 && error.status < 500) pending = null;
+          if (error.status >= 400 && error.status < 500) { pending = null; pendingResult = null; }
           setRetry(Boolean(pending));
           setMessage(pending ? 'Connection interrupted. Retry this same spin to recover its result—no second charge.' : error.message);
           setBusy(false);
@@ -183,10 +186,10 @@ export default function useSlotMachines(sceneRef, ready, token, setBalance, bala
     };
     const tick = setInterval(() => {
       if (active && scene.pose().seatId !== `seat-${active}`) release();
-      if (!sending && !pending && endAt && performance.now() >= endAt) {
+      if (!sending && endAt && performance.now() >= endAt) {
         endAt = 0;
         if (pendingBalance !== null) { setBalance(pendingBalance); pendingBalance = null; }
-        setBusy(false); showResultMessage(resultText); queueAutoSpin();
+        setBusy(false); if (!pending) { showResultMessage(resultText); queueAutoSpin(); }
       }
     }, 100);
     window.addEventListener('pagehide', release);
