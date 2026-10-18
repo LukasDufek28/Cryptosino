@@ -181,14 +181,23 @@ export default function createScene(host, events) {
       keys.clear(); unlock(); events.onGame(nearest.item.game);
     }
   }
-  function home() {
+  function teleport(destination) {
+    if (disposed || !['casino', 'trading'].includes(destination)) return;
     stand(); clearInput(); jumpHeight = 0; jumpVelocity = 0;
-    pos.set(layout.spawn.x, layout.spawn.y, layout.spawn.z);
-    floor = 2; traversingStairs = false; yaw = layout.spawn.yaw; pitch = -0.05;
+    if (destination === 'trading') {
+      pos.set(27, 0, 6.5); floor = 1; yaw = 0;
+    } else {
+      pos.set(layout.spawn.x, layout.spawn.y, layout.spawn.z);
+      floor = 2; yaw = layout.spawn.yaw;
+    }
+    traversingStairs = false; pitch = -0.05;
     poseRevision += 1;
     camera.position.set(pos.x, pos.y + 1.65, pos.z);
+    camera.rotation.set(pitch, yaw, 0, 'YXZ');
     nearest = null;
+    updateNearest();
   }
+  function home() { teleport('casino'); }
   function keyDown(e) {
     if (!enabled || e.target.isContentEditable || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
     if (e.code === 'KeyR' && !e.ctrlKey && !e.metaKey && !e.altKey) {
@@ -507,6 +516,7 @@ export default function createScene(host, events) {
     setEnabled(value) { enabled = value; if (!value) { clearInput(); unlock(); } },
     move(x, y) { touch.x = x; touch.y = y; },
     home,
+    teleport,
     pose() { return { x: pos.x, z: pos.z, yaw, floor, jumpHeight, revision: poseRevision, seatId: seat?.id || null, faceSeed: visitFaceSeed }; },
     peerCount() { return peers.size; },
     updateTrading(data) { if (!disposed) world.trading.update(data); },

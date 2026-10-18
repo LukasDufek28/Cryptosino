@@ -78,7 +78,7 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
   const [seat, setSeat] = useState(null);
   const [status, setStatus] = useState({ floor: 2, x: layout.spawn.x, z: layout.spawn.z, yaw: layout.spawn.yaw, prompt: '', locked: false });
   const [activeGame, setActiveGame] = useState(null);
-  const [showMap, setShowMap] = useState(true);
+  const showMap = true;
   const [showStats, setShowStats] = useState(false);
   const [stats, setStats] = useState(null);
   const [receptionMessage, setReceptionMessage] = useState('');
@@ -97,7 +97,7 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
       return;
     }
     setActiveGame(game);
-    if (game === 'trading') setPanel(token && user ? 'trading' : 'auth');
+    if (game === 'trading') setPanel(LOCAL_DEMO || (token && user) ? 'trading' : 'auth');
     else setPanel(LOCAL_DEMO || (token && user) ? 'game' : 'auth');
   };
   resetBalanceRef.current = async () => {
@@ -140,7 +140,7 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
   }, []);
   const presence = usePresence(token, sceneRef, ready);
   useLeaderboard(sceneRef, ready);
-  const tradingMarket = useTradingMarket(sceneRef, ready);
+  const tradingMarket = useTradingMarket(sceneRef, ready, panel === 'trading');
   const slots = useSlotMachines(sceneRef, ready, token, setBalance, balance);
   const blackjack = useBlackjackTable(sceneRef, ready, token, setBalance, balance);
   blackjackRef.current = blackjack;
@@ -168,9 +168,25 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
     return () => document.removeEventListener('keydown', openChat);
   }, [welcome, panel, chatOpen, error]);
   useEffect(() => { if (LOCAL_DEMO && !user && Number(balance) <= 0) setBalance(1000); }, [user, balance, setBalance]);
+  useEffect(() => {
+    const toggleTravelMap = event => {
+      if (event.code !== 'KeyM' || event.repeat || event.ctrlKey || event.metaKey || event.altKey ||
+          !ready || welcome || error || chatOpen || (panel && panel !== 'map') ||
+          event.target.isContentEditable || /INPUT|TEXTAREA|SELECT/.test(event.target.tagName)) return;
+      event.preventDefault();
+      setPanel(current => current === 'map' ? null : 'map');
+    };
+    document.addEventListener('keydown', toggleTravelMap);
+    return () => document.removeEventListener('keydown', toggleTravelMap);
+  }, [ready, welcome, error, chatOpen, panel]);
   const closePanel = useCallback(() => setPanel(null), []);
   const start = () => { setWelcome(false); sceneRef.current?.setEnabled(true); sceneRef.current?.lock(); };
   const Game = activeGame ? games[activeGame] : null;
+  const travelTo = destination => {
+    sceneRef.current?.teleport(destination);
+    setPanel(null);
+    requestAnimationFrame(() => sceneRef.current?.focus());
+  };
   const openDirectory = () => { setWelcome(false); setPanel('directory'); };
 
   return <main className="amber-world">
@@ -180,7 +196,7 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
       <div className="amber-brand"><span className="amber-brand-mark">A<span>H</span></span><div><strong>THE AMBER HOUSE</strong><small>A CRYPTOSINO ADDRESS · PATCH {casinoVersion.version}</small></div></div>
       <nav aria-label="Casino navigation">
         <button className="amber-nav-button" onClick={openDirectory}>The collection <span>↗</span></button>
-        <button className="amber-icon-button" onClick={() => setShowMap(v => !v)} aria-label="Toggle floor map" aria-pressed={showMap}>⌖</button>
+        <button className="amber-icon-button" onClick={() => { setWelcome(false); setPanel(current => current === 'map' ? null : 'map'); }} aria-label="Open travel map (M)" aria-pressed={panel === 'map'}>⌖</button>
         {user ? <><span className="amber-wallet">${Number(balance).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span><button className="amber-nav-button" onClick={() => setPanel('account')}>{user.username}</button></>
           : <>{LOCAL_DEMO && <span className="amber-wallet">DEMO ${Number(balance).toFixed(2)}</span>}<button className="amber-pill" onClick={() => { setWelcome(false); setPanel('auth'); }}>Sign in <span>↗</span></button></>}
       </nav>
@@ -222,7 +238,7 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
     </>}
 
     <footer className="amber-bottom">
-      <div className="amber-instructions">{blackjack.active ? <><span><kbd>MOUSE</kbd> Select</span><span><kbd>E</kbd> Leave table</span><span><kbd>I</kbd> Stats</span></> : <><span><kbd>W A S D</kbd> Move</span><span><kbd>MOUSE</kbd> Look</span><span><kbd>SPACE</kbd> Jump</span><span><kbd>E</kbd> Interact</span><span><kbd>T</kbd> Chat</span><span><kbd>R</kbd> Reset position</span><span><kbd>I</kbd> Stats</span><span><kbd>ESC</kbd> Cursor</span></>}</div>
+      <div className="amber-instructions">{blackjack.active ? <><span><kbd>MOUSE</kbd> Select</span><span><kbd>E</kbd> Leave table</span><span><kbd>M</kbd> Map</span><span><kbd>I</kbd> Stats</span></> : <><span><kbd>W A S D</kbd> Move</span><span><kbd>MOUSE</kbd> Look</span><span><kbd>SPACE</kbd> Jump</span><span><kbd>E</kbd> Interact</span><span><kbd>T</kbd> Chat</span><span><kbd>R</kbd> Reset position</span><span><kbd>M</kbd> Map</span><span><kbd>I</kbd> Stats</span><span><kbd>ESC</kbd> Cursor</span></>}</div>
       <button className="amber-reset" onClick={() => sceneRef.current?.home()} title="Return upstairs (R)">Return upstairs ↗</button>
     </footer>
     {showMap && !panel && <MiniMap status={status} />}
@@ -240,9 +256,24 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
     <PlayerList enabled={!welcome && !panel && !chatOpen && !error} presence={presence} user={user} balance={balance} sceneRef={sceneRef} />
     {error && <div className="amber-error" role="alert"><h2>A moment, please.</h2><p>{error}</p><button className="amber-pill" onClick={() => window.location.reload()}>Reload</button> <Link to="/lobby">Open classic casino</Link></div>}
 
+    {panel === 'map' && <Dialog title="Explore the district" onClose={closePanel} large>
+      <p className="amber-modal-intro">Choose a building to teleport inside. Press M or Escape to close.</p>
+      <div className="amber-travel-map" aria-label="Casino and trading hall travel map">
+        <button disabled={!ready} onClick={() => travelTo('casino')} className="amber-travel-building">
+          <span className="amber-eyebrow">01 · THE AMBER HOUSE</span><strong>Casino</strong>
+          <span>Games & upstairs lounge</span><small>Teleport inside ↗</small>
+        </button>
+        <button disabled={!ready} onClick={() => travelTo('trading')} className="amber-travel-building amber-travel-exchange">
+          <span className="amber-eyebrow">02 · AMBER EXCHANGE</span><strong>Trading Hall</strong>
+          <span>Markets & trading terminals</span><small>Teleport inside ↗</small>
+        </button>
+        <div className="amber-travel-street" aria-hidden="true">AMBER AVENUE</div>
+      </div>
+    </Dialog>}
     {panel === 'directory' && <Dialog title="The collection" onClose={closePanel}>
       <p className="amber-modal-intro">Four ways to make an evening. Find a station upstairs, or take a seat right here.</p>
       <div className="amber-directory">{layout.stations.map((s, i) => <button key={s.id} onClick={() => openGameRef.current(s.game)} style={{ '--station-color': s.color }}><span className="amber-game-number">0{i + 1}</span><span><strong>{s.name}</strong><small>{s.description}</small></span><span>↗</span></button>)}</div>
+      {LOCAL_DEMO && <button className="amber-pill" onClick={() => openGameRef.current('trading')}>Open demo trading terminal ↗</button>}
       <p className="amber-caption">For market-referenced trading, leave through reception and enter Amber Exchange next door: on your right when facing the casino from the street. Press E at a trading terminal.</p>
     </Dialog>}
     {panel === 'auth' && <Dialog title="Welcome to the house" onClose={closePanel}>
@@ -252,8 +283,8 @@ export default function CasinoWorld({ token, user, balance, setBalance, onAuth, 
     {panel === 'game' && Game && <Dialog title={gameNames[activeGame]} onClose={closePanel} large>
       <Suspense fallback={<p className="amber-caption">Preparing your table…</p>}><Game balance={balance} setBalance={setBalance} token={token} /></Suspense>
     </Dialog>}
-    {panel === 'trading' && token && user && <Dialog title="Amber Exchange · Trading terminal" onClose={closePanel} large>
-      <TradingDesk key={user.id} token={token} user={user} marketFeed={tradingMarket} setBalance={setBalance} />
+    {panel === 'trading' && (LOCAL_DEMO || (token && user)) && <Dialog title="Amber Exchange · Trading terminal" onClose={closePanel} large>
+      <TradingDesk key={user?.id || 'local-demo'} token={token} user={user} marketFeed={tradingMarket} setBalance={setBalance} />
     </Dialog>}
     {panel === 'account' && <Dialog title={`Good evening, ${user?.username || 'guest'}`} onClose={closePanel}>
       <div className="amber-account"><p>Your balance</p><h3>${Number(balance).toFixed(2)}</h3><Link to="/lobby">Open classic casino ↗</Link>{user?.is_admin && <Link to="/admin">Admin dashboard ↗</Link>}<button className="amber-pill" onClick={() => { closePanel(); onLogout(); }}>Sign out</button></div>

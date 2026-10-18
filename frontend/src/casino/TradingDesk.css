@@ -1,20 +1,55 @@
-.exchange-desk { color: #e3eadd; background: #18362f; padding: 22px; border-radius: 12px; }
-.exchange-banner span { display: block; color: #bfa774; font-size: 11px; letter-spacing: 2px; }
-.exchange-banner strong { display: block; font: 32px Georgia, serif; margin: 8px 0; }
-.exchange-desk p, .exchange-desk small { color: #c0cfc5; line-height: 1.5; }
-.exchange-assets { display: grid; grid-template-columns: repeat(auto-fit,minmax(145px,1fr)); gap: 10px; }
-.exchange-desk button { background: #284b40; color: #e6ddbc; border: 1px solid #728570; border-radius: 7px; padding: 12px; cursor: pointer; }
-.exchange-assets button { text-align: left; }
-.exchange-assets button[aria-pressed=true] { border-color: #e4c984; background: #3f6250; }
-.exchange-assets strong, .exchange-assets span, .exchange-assets b { display: block; margin: 4px 0; }
-.exchange-assets span, .exchange-assets small { font-size: 11px; }
-.exchange-chart { width: 100%; margin: 18px 0; background: #122c26; border-radius: 8px; }
-.exchange-summary, .exchange-order { display: flex; flex-wrap: wrap; gap: 16px; margin: 16px 0; align-items: center; }
-.exchange-summary span { flex: 1; font-size: 12px; }
-.exchange-summary b { display: block; font-size: 19px; margin-top: 6px; }
-.exchange-order input { width: 90px; padding: 10px; margin-left: 8px; background: #122c26; color: #fff3d6; border: 1px solid #718e81; border-radius: 5px; }
-.exchange-desk button:disabled { opacity: .45; cursor: default; }
-.exchange-table { overflow-x: auto; }
-.exchange-desk table { border-collapse: collapse; width: 100%; font-size: 13px; }
-.exchange-desk th, .exchange-desk td { text-align: left; padding: 10px; border-bottom: 1px solid #3c5e50; white-space: nowrap; }
-@media(max-width:600px) { .exchange-desk { padding: 12px; } .exchange-assets { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px; } .exchange-assets button { padding: 8px; } }
+.exchange-desk { color: #dce5ec; background: #111b24; padding: 0; border: 1px solid #344551; border-radius: 4px; overflow: hidden; font: 12px Arial, sans-serif; }
+.exchange-desk button, .exchange-desk input, .exchange-desk select { font: inherit; }
+.exchange-desk button { color: #dce5ec; background: #263746; border: 1px solid #415564; border-radius: 3px; padding: 8px 12px; cursor: pointer; }
+.exchange-desk button:hover:not(:disabled) { filter: brightness(1.2); }
+.exchange-desk button:disabled { opacity: .4; cursor: default; }
+.exchange-desk button:focus-visible, .exchange-desk input:focus-visible, .exchange-desk select:focus-visible { outline: 2px solid #65b8ef; outline-offset: 2px; }
+.exchange-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 12px; background: #233240; border-bottom: 1px solid #415564; }
+.exchange-toolbar strong { color: #f0cc85; letter-spacing: .12em; }
+.exchange-toolbar button { margin-left: auto; }
+.exchange-online, .exchange-positive { color: #4ed1ac !important; }
+.exchange-offline, .exchange-negative { color: #f1888d !important; }
+.exchange-workspace { display: grid; grid-template-columns: 260px minmax(0,1fr); }
+.exchange-watch { border-right: 1px solid #344551; background: #192630; }
+.exchange-watch h3 { margin: 0; padding: 12px; font-size: 12px; background: #233240; }
+.exchange-watch h3 small { float: right; color: #91a7b5; font-weight: normal; }
+.exchange-watch-head, .exchange-watch > button { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; width: 100%; text-align: right; padding: 10px 8px; border: 0; border-bottom: 1px solid #30414d; border-radius: 0; background: transparent; font: 11px Consolas, monospace; }
+.exchange-watch-head { color: #91a7b5; }
+.exchange-watch-head > :first-child, .exchange-watch > button > :first-child { text-align: left; }
+.exchange-watch > button[aria-pressed=true] { background: #2b4c65; box-shadow: inset 3px 0 #65b8ef; }
+.exchange-watch small { display: block; font: 9px Arial, sans-serif; margin-top: 5px; color: #a4b6c1; }
+.exchange-contract { padding: 12px; color: #a4b6c1; line-height: 1.6; border-top: 1px solid #415564; }
+.exchange-contract h4 { margin: 0; color: #dce5ec; }
+.exchange-chart-pane { min-width: 0; background: #0c151d; }
+.exchange-chart-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px; border-bottom: 1px solid #344551; }
+.exchange-chart-toolbar small { color: #91a7b5; margin-left: 8px; }
+.exchange-chart-toolbar select { background: #263746; border: 1px solid #415564; color: white; padding: 5px; margin-left: 5px; }
+.exchange-oneclick { display: grid; grid-template-columns: 1fr 140px 1fr; max-width: 550px; gap: 2px; margin: 14px; }
+.exchange-oneclick button { padding: 12px 8px; border: 0; border-radius: 2px; }
+.exchange-oneclick .exchange-sell { background: #b7404c; }
+.exchange-oneclick .exchange-buy { background: #2669ad; }
+.exchange-oneclick button span, .exchange-oneclick button strong, .exchange-oneclick button small { display: block; }
+.exchange-oneclick button strong { font: bold 23px Consolas, monospace; margin: 7px 0; }
+.exchange-oneclick button small { font-size: 9px; color: #ffffffbd; }
+.exchange-oneclick label { display: flex; flex-direction: column; justify-content: center; gap: 8px; background: #233240; padding: 9px; text-align: center; }
+.exchange-oneclick input { width: 100%; box-sizing: border-box; padding: 9px 4px; background: #101c26; border: 1px solid #587181; color: white; text-align: center; font-size: 16px; }
+.exchange-oneclick label small { color: #a4b6c1; font-size: 9px; }
+.exchange-order-estimate { display: flex; flex-wrap: wrap; gap: 14px; padding: 0 14px 8px; font-size: 11px; color: #a4b6c1; }
+.exchange-chart { display: block; width: 100%; min-height: 220px; }
+.exchange-chart-pane > p, .exchange-quote-time { margin: 0; padding: 8px 14px; color: #91a7b5; font-size: 10px; }
+.exchange-summary { display: flex; flex-wrap: wrap; gap: 24px; padding: 14px; background: #233240; border-top: 1px solid #415564; }
+.exchange-summary span { color: #a4b6c1; }
+.exchange-summary b { display: block; margin-top: 6px; color: #edf1f4; font: bold 16px Consolas, monospace; }
+.exchange-tabs { display: flex; padding: 8px 8px 0; gap: 4px; }
+.exchange-tabs button[aria-pressed=true] { background: #34516a; border-bottom-color: #65b8ef; }
+.exchange-table { overflow-x: auto; min-height: 115px; }
+.exchange-table table { border-collapse: collapse; width: 100%; font: 11px Consolas, monospace; }
+.exchange-table th, .exchange-table td { text-align: right; padding: 10px; border-bottom: 1px solid #293b48; white-space: nowrap; }
+.exchange-table th { color: #91a7b5; background: #1b2a35; font-weight: normal; }
+.exchange-table th:first-child, .exchange-table td:first-child { text-align: left; }
+.exchange-table p, .exchange-message, .exchange-notes, .exchange-desk > p { padding: 10px 14px; margin: 0; color: #a4b6c1; line-height: 1.5; }
+.exchange-message { border-top: 1px solid #344551; }
+.exchange-notes { font-size: 11px; }
+.exchange-notes summary { cursor: pointer; }
+@media(max-width:850px) { .exchange-workspace { grid-template-columns: 210px minmax(0,1fr); } .exchange-oneclick { grid-template-columns: 1fr 110px 1fr; margin: 8px; } .exchange-oneclick button strong { font-size: 17px; } }
+@media(max-width:600px) { .exchange-workspace { grid-template-columns: 1fr; } .exchange-contract { display: none; } .exchange-watch { border-right: 0; } .exchange-chart-toolbar small { display: none; } .exchange-oneclick { max-width: none; } .exchange-summary { gap: 14px; } .exchange-toolbar > span { font-size: 10px; } }

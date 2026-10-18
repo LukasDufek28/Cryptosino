@@ -41,7 +41,7 @@ module.exports = (auth, { getClient: connect = getClient, marketFeed = createMar
   router.get('/market', async (req, res) => {
     let client;
     try {
-      const market = await marketFeed.getMarket();
+      const market = await marketFeed.getMarket({ activeChart: req.query.chart === '1' });
       client = await connect();
       res.json({ ...market, legacyAssets: await legacyAssets(client) });
     } catch { res.status(503).json({ error: 'Market data unavailable. Please try again shortly.' }); }
@@ -56,6 +56,11 @@ module.exports = (auth, { getClient: connect = getClient, marketFeed = createMar
     const existing = (await client.query('SELECT response FROM trading_orders WHERE user_id=$1 AND request_id=$2', [req.user.id, requestId])).rows[0];
     if (existing) return { order: existing.response, ...(await account(client, req.user.id)) };
     if (![...ASSETS.map(a => a.symbol), ...Object.keys(LEGACY_NAMES)].includes(symbol) || !['buy', 'sell'].includes(side) || !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 10000 || !Number.isSafeInteger(quoteTick) || !Number.isSafeInteger(limitPrice) || limitPrice < 1) fail('Invalid order. Use 1–10,000 whole units.');
+    const config = ASSETS.find(a => a.symbol === symbol);
+    if (config) {
+      const stepUnits = Math.round(config.lotStep * config.lotUnits);
+      if (quantity % stepUnits !== 0) fail(`Volume must use ${config.lotStep} lot increments.`);
+    }
     const market = await marketFeed.getMarket();
     if (Date.now() - market.fetchedAt > 120000 || quoteTick !== market.tick) fail('Quote expired. Refresh prices and submit again.', 409);
     const legacy = Object.hasOwn(LEGACY_NAMES, symbol);

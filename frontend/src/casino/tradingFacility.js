@@ -43,9 +43,9 @@ export default function tradingFacility(scene, block) {
     ctx.font = '23px sans-serif'; ctx.fillStyle = '#a8c8bc'; ctx.fillText('YAHOO FINANCE REFERENCE PRICES / GAME CREDITS / QUOTES MAY BE DELAYED', 65, 130);
     if (!market) { ctx.fillText('Approach a terminal to connect to the market.', 65, 300); texture.needsUpdate = true; return; }
     market.assets.forEach((asset, i) => {
-      const y = 190 + i * 83, history = asset.history || [];
+      const y = 185 + i * 72, history = asset.history || [];
       ctx.fillStyle = '#ecd5a5'; ctx.font = '30px sans-serif'; ctx.fillText(asset.symbol, 65, y);
-      ctx.font = '28px sans-serif'; ctx.fillText(asset.price ? `${asset.unitScale ? '' : '$'}${((asset.referencePrice || asset.price) / 100).toFixed(2)}${asset.unitScale ? ' pts' : ''}` : 'UNAVAILABLE', 315, y);
+      ctx.font = '28px sans-serif'; ctx.fillText(asset.price ? `${asset.unitScale && !asset.continuous ? '' : '$'}${((asset.referencePrice || asset.price) / 100).toFixed(2)}${asset.unitScale && !asset.continuous ? ' pts' : ''}` : 'UNAVAILABLE', 315, y);
       ctx.font = '20px sans-serif'; ctx.fillStyle = asset.tradable ? '#91d9b5' : '#b2bcb2';
       ctx.fillText(asset.tradable ? 'OPEN' : asset.unavailable ? 'FEED OFFLINE' : 'CLOSED / DELAYED', 590, y);
       const prices = history.map(p => p.price), low = prices.length ? Math.min(...prices) : 0;

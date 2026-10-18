@@ -173,3 +173,12 @@
 .amber-welcome-foot { margin-top: 36px; color: #d9caa9; font-size: 8px; letter-spacing: .14em; }
 @media (max-width: 600px) { .amber-welcome { left: 20px; width: calc(100vw - 40px); padding: 34px 30px; } .amber-welcome h1 { font-size: clamp(40px, 10vw, 58px); } .amber-enter { width: 100%; min-width: 0; } }
 @media (max-height: 650px) { .amber-welcome { padding-top: 24px; padding-bottom: 24px; } .amber-welcome-crest { margin-bottom: 16px; } .amber-welcome h1 { margin: 10px 0; } .amber-welcome p { margin-bottom: 18px; } .amber-welcome-foot { margin-top: 18px; } }
+
+.amber-travel-map { display: grid; grid-template-columns: 1.3fr 1fr; gap: 24px; padding: 30px; border: 1px solid #d7b87555; border-radius: 12px; background: #223d35; }
+.amber-travel-building { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 16px; text-align: left; padding: 32px 24px; min-height: 230px; color: #f3e7cf; background: #50634d; border: 2px solid #d7b875; border-radius: 8px; }
+.amber-travel-building:hover { background: #61775c; }
+.amber-travel-building strong { font: 32px Georgia, serif; }
+.amber-travel-building small { color: #ffe1a0; }
+.amber-travel-exchange { background: #345d56; }
+.amber-travel-street { grid-column: 1 / -1; padding: 20px; text-align: center; letter-spacing: .3em; font-size: 10px; color: #dbc79e; border-top: 2px dashed #dbc79e77; background: #ffffff08; }
+@media (max-width: 600px) { .amber-travel-map { grid-template-columns: 1fr; padding: 16px; gap: 16px; } .amber-travel-building { min-height: 160px; padding: 20px; } }

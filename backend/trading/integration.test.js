@@ -37,7 +37,7 @@ test('trading endpoints: live prices, settlement, retries and legacy liquidation
     const marketFeed = { getMarket: async () => {
       const fetchedAt = Date.now();
       return { tick: testTick, fetchedAt, serverNow: fetchedAt, tickMs: 60000, source: 'Test feed', synthetic: false,
-        assets: ['SP500', 'NAS100', 'TSLA', 'AAPL', 'GOOGL'].map(symbol => ({ symbol, name: symbol, price: 10000, bid: 9990, ask: 10010, history: [], quotedAt: fetchedAt, marketOpen: true, tradable: true })) };
+        assets: ['SP500', 'NAS100', 'TSLA', 'AAPL', 'GOOGL', 'BTCUSD'].map(symbol => ({ symbol, name: symbol, price: 10000, bid: 9990, ask: 10010, history: [], quotedAt: fetchedAt, marketOpen: true, tradable: true })) };
     } };
     app.use('/api/trading', require('./router')((req, res, next) => { req.user = { id: 1 }; next(); }, { getClient: async () => isolatedClient, marketFeed }));
     server = await new Promise(resolve => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });
@@ -47,7 +47,7 @@ test('trading endpoints: live prices, settlement, retries and legacy liquidation
       return { status: response.status, body: await response.json() };
     };
     const market = await request('/market');
-    assert.equal(market.status, 200); assert.equal(market.body.assets.length, 5);
+    assert.equal(market.status, 200); assert.equal(market.body.assets.length, 6);
     assert.equal(market.body.synthetic, false);
     const account = await request('/account');
     assert.equal(account.status, 200); assert.equal(account.body.balance, 1000);
@@ -88,7 +88,17 @@ test('trading endpoints: live prices, settlement, retries and legacy liquidation
     assert.equal(legacySell.body.positions.length, 0);
     const legacyBuy = await request('/orders', { ...order, requestId: randomUUID(), symbol: 'AMBR', quoteTick: legacyMarket.body.tick });
     assert.equal(legacyBuy.status, 400);
-    t.diagnostic('Five live assets, settlement, retries, rejections and legacy liquidation verified using isolated test credits.');
+    const btcOrder = { ...order, requestId: randomUUID(), symbol: 'BTCUSD', quantity: 10, limitPrice: 10010 };
+    const btcBuy = await request('/orders', btcOrder);
+    assert.equal(btcBuy.status, 200);
+    assert.equal(btcBuy.body.positions.find(p => p.symbol === 'BTCUSD').quantity, 10);
+    const btcRetry = await request('/orders', btcOrder);
+    assert.equal(btcRetry.status, 200);
+    assert.equal(btcRetry.body.balance, btcBuy.body.balance);
+    const btcSell = await request('/orders', { ...btcOrder, requestId: randomUUID(), side: 'sell', limitPrice: 1 });
+    assert.equal(btcSell.status, 200);
+    assert.equal(btcSell.body.positions.length, 0);
+    t.diagnostic('Six live assets, settlement, retries, rejections and legacy liquidation verified using isolated test credits.');
   } finally {
     if (server) { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
     if (client) { await client.query('ROLLBACK'); client.release(); }

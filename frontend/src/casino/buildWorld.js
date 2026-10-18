@@ -146,19 +146,21 @@ export default function buildWorld(scene) {
   // The renderer updates this reflection only while the mirror is in the camera frustum.
   // Reflector also skips the reflection pass when viewed from behind.
   // A real reflection, with a separate camera layer for the first-person body.
-  box(building, [3.3, 2.9, 0.18], '#b99861', [-5, 1.65, -9.65]);
-  const mirror = new Reflector(new THREE.PlaneGeometry(3, 2.6), {
+  // The exposed end wall beneath the top stair faces the rear hall.
+  const facePlace = group(building, stairCenterX, 0, stair.topZ - 0.035, Math.PI);
+  box(facePlace, [2.7, 2.9, 0.18], '#b99861', [-0.5, 1.65, 0.09]);
+  const mirror = new Reflector(new THREE.PlaneGeometry(2.4, 2.6), {
     color: 0xffffff, textureWidth: 512, textureHeight: 512, clipBias: 0.003, multisample: 0
   });
-  mirror.position.set(-5, 1.65, -9.54);
+  mirror.position.set(-0.5, 1.65, 0.2);
   mirror.camera.layers.enable(1);
-  building.add(mirror);
-  sign(building, 'THE FACE PLACE', 3.2, [-5, 3.45, -9.5]);
-  const faceButton = { x: -2.6, z: -9.45, name: 'Randomize face' };
-  box(building, [0.65, 0.65, 0.18], '#b99861', [faceButton.x, 1.3, faceButton.z]);
-  const button = cylinder(building, 0.22, 0.22, 0.12, '#d88668', [faceButton.x, 1.3, faceButton.z + 0.14], 12);
+  facePlace.add(mirror);
+  sign(facePlace, 'THE FACE PLACE', 2.7, [-0.5, 3.45, 0.24]);
+  const faceButton = { x: stairCenterX - 1.4, z: facePlace.position.z - 0.23, name: 'Randomize face' };
+  box(facePlace, [0.65, 0.65, 0.18], '#b99861', [1.4, 1.3, 0.09]);
+  const button = cylinder(facePlace, 0.22, 0.22, 0.12, '#d88668', [1.4, 1.3, 0.23], 12);
   button.rotation.x = Math.PI / 2;
-  sign(building, 'RANDOMIZE FACE', 1.6, [faceButton.x, 1.95, faceButton.z + 0.1]);
+  sign(facePlace, 'RANDOMIZE FACE', 1, [1.4, 1.95, 0.2]);
 
   // Upstairs: green felt, oak, brass, terracotta and lamps.
   box(building, [19.5, 0.032, 8.5], '#506b59', [2.3, upper + 0.035, -4.9]);
